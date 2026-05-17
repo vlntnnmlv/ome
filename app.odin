@@ -16,6 +16,7 @@ Mode :: distinct u32
 App :: struct {
 	width:           i32,
 	height:          i32,
+	pixel_ratio:     f32,
 	window:          ^SDL.Window,
 	swapchain:       ^CA.MetalLayer,
 	command_q:       ^MTL.CommandQueue,
@@ -94,6 +95,9 @@ app_create :: proc(
 
 	pixel_width, pixel_height: i32
 	SDL.GetWindowSizeInPixels(app.window, &pixel_width, &pixel_height)
+	app.width = pixel_width
+	app.height = pixel_height
+	app.pixel_ratio = f32(pixel_width) / f32(width)
 
 	app.device = MTL.CreateSystemDefaultDevice()
 

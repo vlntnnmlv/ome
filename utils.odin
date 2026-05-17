@@ -32,8 +32,10 @@ get_n_colors :: proc(color: Maybe(Color), count: int) -> []Color {
 }
 
 screen2world :: proc(x: f32, y: f32) -> [2]f32 {
+	px := x * app.pixel_ratio
+	py := y * app.pixel_ratio
 	size := [2]f32{cast(f32)app.width, cast(f32)app.height}
-	point := [2]f32{x, y}
+	point := [2]f32{px, py}
 	return (point - size / 2) * 2 / size
 }
 
