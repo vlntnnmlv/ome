@@ -1,137 +1,156 @@
 package ome
 
 import "core:os"
+import "core:path/filepath"
+import "core:slice"
+import "core:strings"
 
 import NS "core:sys/darwin/Foundation"
 import MTL "vendor:darwin/Metal"
 import STBI "vendor:stb/image"
 import STBTT "vendor:stb/truetype"
 
-FONT_ATLAS_SIZE :: 1024
-
-FontData :: struct {
-	char_data: [96]STBTT.bakedchar,
-}
-
-FontDataNew :: struct {
-	bitmap:       []u8,
-	char_data:    []STBTT.packedchar,
-	// atlas:        ^SDL.Texture,
-	texture_size: i32,
-	line_height:  f32,
-}
-
-app_load_font :: proc(window: ^App, ttf_path: string, size: f32) -> bool {
-	font_data, err := os.read_entire_file_from_path(ttf_path, context.allocator)
-	if err != nil do return false
-	defer delete(font_data, context.allocator)
-
-	atlas := make([]u8, FONT_ATLAS_SIZE * FONT_ATLAS_SIZE)
-	defer delete(atlas)
-
-	ret := STBTT.BakeFontBitmap(
-		raw_data(font_data),
-		0,
-		size,
-		raw_data(atlas),
-		FONT_ATLAS_SIZE,
-		FONT_ATLAS_SIZE,
-		32,
-		96,
-		&window.font.char_data[0],
-	)
-	if ret <= 0 do return false
-
-	desc := MTL.TextureDescriptor.texture2DDescriptorWithPixelFormat(
-		.R8Unorm,
-		FONT_ATLAS_SIZE,
-		FONT_ATLAS_SIZE,
-		false,
-	)
-	desc->setStorageMode(.Shared)
-	window.font_texture = window.device->newTextureWithDescriptor(desc)
-	region := MTL.Region {
-		origin = {0, 0, 0},
-		size   = {FONT_ATLAS_SIZE, FONT_ATLAS_SIZE, 1},
-	}
-	window.font_texture->replaceRegion(region, 0, raw_data(atlas), FONT_ATLAS_SIZE)
-
-	samp_desc := NS.new(MTL.SamplerDescriptor)
-	samp_desc->setMinFilter(.Linear)
-	samp_desc->setMagFilter(.Linear)
-	samp_desc->setSAddressMode(.ClampToZero)
-	samp_desc->setTAddressMode(.ClampToZero)
-	window.font_sampler = window.device->newSamplerState(samp_desc)
-
-	return true
-}
-
-assets_load_font :: proc(path: string, size: f32) -> bool {
-	font_data, err := os.read_entire_file_from_path(path, context.allocator)
-	if err != nil do return false
-	defer delete(font_data, context.allocator)
-
-	app.font_new.texture_size = 1024
-	app.font_new.line_height = size
-
-	app.font_new.bitmap = make([]u8, app.font_new.texture_size * app.font_new.texture_size)
-	app.font_new.char_data = make([]STBTT.packedchar, CharAmount)
-
-	pack_context := new(STBTT.pack_context, context.temp_allocator)
-	STBTT.PackBegin(
-		pack_context,
-		&app.font_new.bitmap[0],
-		app.font_new.texture_size,
-		app.font_new.texture_size,
-		0,
-		1,
-		nil,
-	)
-	STBTT.PackSetOversampling(pack_context, 1, 1)
-
-	STBTT.PackFontRange(
-		pack_context,
-		&font_data[0],
-		0,
-		128,
-		CharAtStart,
-		CharAmount,
-		&app.font_new.char_data[0],
-	)
-	STBTT.PackEnd(pack_context)
-
-	desc := MTL.TextureDescriptor.texture2DDescriptorWithPixelFormat(
-		.R8Unorm,
-		FONT_ATLAS_SIZE,
-		FONT_ATLAS_SIZE,
-		false,
-	)
-	desc->setStorageMode(.Shared)
-	app.font_texture = app.device->newTextureWithDescriptor(desc)
-	region := MTL.Region {
-		origin = {0, 0, 0},
-		size   = {FONT_ATLAS_SIZE, FONT_ATLAS_SIZE, 1},
-	}
-	app.font_texture->replaceRegion(region, 0, raw_data(app.font_new.bitmap), FONT_ATLAS_SIZE)
-
-	samp_desc := NS.new(MTL.SamplerDescriptor)
-	samp_desc->setMinFilter(.Linear)
-	samp_desc->setMagFilter(.Linear)
-	samp_desc->setSAddressMode(.ClampToZero)
-	samp_desc->setTAddressMode(.ClampToZero)
-	app.font_sampler = app.device->newSamplerState(samp_desc)
-
-	STBI.write_png(
-		"test.png",
-		1024,
-		1024,
-		1,
-		raw_data(app.font_new.bitmap),
-		pack_context.stride_in_bytes,
-	)
-
-	return true
+Font :: struct {
+	path:          string,
+	bitmap_size:   i32,
+	bitmap:        []u8,
+	sizes:         [dynamic]f32,
+	char_data_new: map[f32][]STBTT.packedchar,
+	texture:       ^MTL.Texture,
+	sampler:       ^MTL.SamplerState,
 }
 
 CharAtStart :: 32
 CharAmount :: 95
+
+FontError :: enum {
+	FILE_ERROR,
+	PACKING_ERROR,
+}
+
+INITIAL_BITMAP_SIZE :: 1024
+
+asset_pack_font :: proc() {
+	for {
+		ok, err := assets_load_font_internal()
+		if ok || err == .FILE_ERROR do break
+		if err == .PACKING_ERROR do app.font.bitmap_size *= 2
+	}
+}
+
+assets_load_font :: proc(path: string, sizes: []f32) {
+	app.font.path = path
+	app.font.bitmap_size = INITIAL_BITMAP_SIZE
+
+	for size in sizes do append(&app.font.sizes, size)
+
+	asset_pack_font()
+}
+
+asset_update_font_sizes :: proc(size: f32) {
+	append(&app.font.sizes, size)
+	asset_pack_font()
+}
+
+asset_get_or_update_font_size :: proc(size: f32) -> f32 {
+	if !slice.contains(app.font.sizes[:], size) do asset_update_font_sizes(size)
+	return size
+}
+
+assets_load_font_internal :: proc() -> (bool, FontError) {
+	font_data, err := os.read_entire_file_from_path(app.font.path, context.allocator)
+	defer delete(font_data, context.allocator)
+	if err != nil do return false, .FILE_ERROR
+
+	// clean exisiting font data
+	if app.font.texture != nil {
+		app.font.texture->release()
+		app.font.texture = nil
+	}
+	if app.font.sampler != nil {
+		app.font.sampler->release()
+		app.font.sampler = nil
+	}
+	if app.font.bitmap != nil do delete(app.font.bitmap)
+	if app.font.char_data_new != nil {
+		for _, &char_data in app.font.char_data_new do delete(char_data)
+		delete(app.font.char_data_new)
+	}
+
+	// create empty data
+	app.font.bitmap, err = make([]u8, app.font.bitmap_size * app.font.bitmap_size)
+	app.font.char_data_new = make(map[f32][]STBTT.packedchar)
+	for size in app.font.sizes {
+		app.font.char_data_new[size] = make([]STBTT.packedchar, CharAmount)
+	}
+
+	// pack font}
+	pack_context := new(STBTT.pack_context, context.temp_allocator)
+	STBTT.PackBegin(
+		pack_context,
+		&app.font.bitmap[0],
+		app.font.bitmap_size,
+		app.font.bitmap_size,
+		0,
+		1,
+		nil,
+	)
+	STBTT.PackSetOversampling(pack_context, 2, 2)
+	for size, i in app.font.sizes {
+		if ok := STBTT.PackFontRange(
+			pack_context,
+			&font_data[0],
+			0,
+			size,
+			CharAtStart,
+			CharAmount,
+			&app.font.char_data_new[app.font.sizes[i]][0],
+		); ok != 1 {
+			STBTT.PackEnd(pack_context)
+			return false, .PACKING_ERROR
+		}
+	}
+	STBTT.PackEnd(pack_context)
+
+	// bake to bitmap to metal texture
+	desc := MTL.TextureDescriptor.texture2DDescriptorWithPixelFormat(
+		.R8Unorm,
+		cast(NS.UInteger)app.font.bitmap_size,
+		cast(NS.UInteger)app.font.bitmap_size,
+		false,
+	)
+	desc->setStorageMode(.Shared)
+	app.font.texture = app.device->newTextureWithDescriptor(desc)
+	region := MTL.Region {
+		origin = {0, 0, 0},
+		size   = {cast(NS.Integer)app.font.bitmap_size, cast(NS.Integer)app.font.bitmap_size, 1},
+	}
+	app.font.texture->replaceRegion(
+		region,
+		0,
+		raw_data(app.font.bitmap),
+		cast(NS.UInteger)app.font.bitmap_size,
+	)
+	samp_desc := NS.new(MTL.SamplerDescriptor)
+	samp_desc->setMinFilter(.Nearest)
+	samp_desc->setMagFilter(.Nearest)
+	samp_desc->setSAddressMode(.ClampToZero)
+	samp_desc->setTAddressMode(.ClampToZero)
+	app.font.sampler = app.device->newSamplerState(samp_desc)
+
+	// DEBUG: save bitmap to .png
+	filename := strings.concatenate(
+		{"debug/", strings.split(filepath.base(app.font.path), ".")[0], ".png"},
+	)
+
+	STBI.write_png(
+		strings.clone_to_cstring(filename),
+		app.font.bitmap_size,
+		app.font.bitmap_size,
+		1,
+		raw_data(app.font.bitmap),
+		pack_context.stride_in_bytes,
+	)
+
+	return true, nil
+}

@@ -47,19 +47,52 @@ graphics_add_quad :: proc(rect: Rect, color: Maybe(Color) = nil) {
 	append(&app.render_calls, RenderCall{type = .Triangle, start = start, count = points_count})
 }
 
-graphics_add_text :: proc(text: string, x: f32, y: f32, color: Color) {
-	// TODO: Use new API and add fitting
-	cx := x
-	cy := cast(f32)app.height - y
+measure_text :: proc(text: string, font_size: f32) -> [2]f32 {
+	r_font_size := asset_get_or_update_font_size(font_size)
+
+	x, y, max_x: f32 = 0, 0, 0
+	for ch in text {
+		if ch < CharAtStart || ch > CharAtStart + CharAmount do continue
+
+		quad: STBTT.aligned_quad
+		STBTT.GetPackedQuad(
+			&app.font.char_data_new[r_font_size][0],
+			app.font.bitmap_size,
+			app.font.bitmap_size,
+			cast(i32)ch - 32,
+			&x,
+			&y,
+			&quad,
+			true,
+		)
+		max_x = max(x, max_x)
+	}
+
+	return {max_x, r_font_size}
+}
+
+fit_text :: proc(text: string, font_size: f32, rect: Rect) -> f32 {
+	size := measure_text(text, font_size)
+	scale_x := rect.w / size.x
+	scale_y := rect.h / size.y
+	scale := min(scale_x, scale_y)
+	return font_size * min(scale, 1)
+}
+
+graphics_add_text :: proc(text: string, font_size: f32, rect: Rect, color: Maybe(Color) = nil) {
+	r_font_size := asset_get_or_update_font_size(fit_text(text, font_size, rect))
+
+	cx := rect.x
+	cy := cast(f32)app.height - rect.y
 
 	for ch in text {
 		if ch < 32 || ch >= 128 do continue
 
 		q: STBTT.aligned_quad
 		STBTT.GetPackedQuad(
-			&app.font_new.char_data[0],
-			FONT_ATLAS_SIZE,
-			FONT_ATLAS_SIZE,
+			&app.font.char_data_new[r_font_size][0],
+			app.font.bitmap_size,
+			app.font.bitmap_size,
 			cast(i32)ch - 32,
 			&cx,
 			&cy,
@@ -84,7 +117,7 @@ graphics_add_text :: proc(text: string, x: f32, y: f32, color: Color) {
 			{q.s1, q.t1},
 			{q.s1, q.t0},
 		}
-		col := get_n_colors_dupe(color, 6)
+		col := get_n_colors(color, 6)
 		mode := [6]Mode{1, 1, 1, 1, 1, 1}
 
 		start := len(app.positions.cpu)

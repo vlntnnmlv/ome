@@ -42,10 +42,7 @@ App :: struct {
 	// Fonts
 	uvs:             GPUBuffer(Uv),
 	modes:           GPUBuffer(Mode),
-	font_texture:    ^MTL.Texture,
-	font_sampler:    ^MTL.SamplerState,
-	font:            FontData,
-	font_new:        FontDataNew,
+	font:            Font,
 	//
 	// Resets each frame
 	frame_context:   FrameContext,
@@ -85,8 +82,6 @@ app_create :: proc(
 		height,
 		{.HIGH_PIXEL_DENSITY, .HIDDEN, .RESIZABLE, .METAL},
 	)
-	app.width = width
-	app.height = height
 
 	native_window := (^NS.Window)(
 		SDL.GetPointerProperty(
@@ -247,9 +242,9 @@ app_render :: proc(app: ^App) {
 	app.frame_context.encoder->setVertexBuffer(app.uvs.gpu, 0, 2)
 	app.frame_context.encoder->setVertexBuffer(app.modes.gpu, 0, 3)
 
-	if app.font_texture != nil {
-		app.frame_context.encoder->setFragmentTexture(app.font_texture, 0)
-		app.frame_context.encoder->setFragmentSamplerState(app.font_sampler, 0)
+	if app.font.texture != nil {
+		app.frame_context.encoder->setFragmentTexture(app.font.texture, 0)
+		app.frame_context.encoder->setFragmentSamplerState(app.font.sampler, 0)
 	}
 
 	for render_call in app.render_calls {

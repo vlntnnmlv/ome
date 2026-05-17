@@ -126,7 +126,7 @@ main :: proc() {
 	defer app_close(app)
 
 	// load assets
-	assets_load_font("assets/Iosevka.ttf", 32)
+	assets_load_font("assets/Iosevka.ttf", {32, 64})
 
 	// setup user inut
 	app.key_callbacks[SDL.K_SPACE] = proc(app: ^App) {
@@ -175,8 +175,8 @@ main :: proc() {
 
 		render_line([2]f32{0, 0}, [2]f32{width, height}, Color{1, 0, 0, 1})
 		render_segments([][2]f32{{0, 0}, {100, 400}, {200, 300}, {150, 100}}, Color{1, 1, 0, 1})
-		render_rect(Rect{100, 300, 50, 60}, Color{0.3, 0.23, 0.8, 1})
-		render_text("Hello world!", 300, 300)
+		render_rect(Rect{300, 300, 400, 400}, Color{1, 1, 1, 1})
+		render_text("Hello world!", 256, Rect{300, 300, 200, 200}, Color{0, 0, 0, 1})
 
 		app_render(app)
 		app_submit(app)
