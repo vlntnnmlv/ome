@@ -1,5 +1,6 @@
 package ome
 
+import "core:fmt"
 import "core:os"
 import "core:time"
 
@@ -12,6 +13,7 @@ import SDL "vendor:sdl3"
 Vertex :: distinct [4]f32
 Uv :: distinct [2]f32
 Mode :: distinct u32
+TexID :: distinct u32
 
 App :: struct {
 	width:           i32,
@@ -36,9 +38,14 @@ App :: struct {
 	frame_start:     time.Time,
 	elapsed:         time.Duration,
 	start_time:      time.Time,
+	dt:              f32,
 	//
 	// UI
 	ui_context:      UIContext,
+	//
+	// Textures
+	texture_manager: ^TextureManager,
+	tex_ids:         GPUBuffer(TexID),
 	//
 	// Fonts
 	uvs:             GPUBuffer(Uv),
@@ -101,6 +108,12 @@ app_create :: proc(
 
 	app.device = MTL.CreateSystemDefaultDevice()
 
+	argument_buffer_support := app.device->argumentBuffersSupport()
+	if argument_buffer_support != .Tier2 {
+		return false
+	}
+	fmt.println("Tier 2: OK")
+
 	app.swapchain = CA.MetalLayer.layer()
 	app.swapchain->setDrawableSize(NS.Size{cast(NS.Float)pixel_width, cast(NS.Float)pixel_height})
 	app.swapchain->setDevice(app.device)
@@ -131,13 +144,18 @@ app_create :: proc(
 		app.compile_options,
 	)
 	if lib_error != nil {
+		fmt.eprintln("Shader compile failed:", lib_error->localizedDescription()->odinString())
 		return false
 	}
 
 	vertex_program := program_library->newFunctionWithName(NS.AT("vertex_main"))
 	fragment_program := program_library->newFunctionWithName(NS.AT("fragment_main"))
+
 	assert(vertex_program != nil)
 	assert(fragment_program != nil)
+
+	app.texture_manager = texture_manager_create()
+	texture_manager_init(app.texture_manager, fragment_program)
 
 	pipeline_state_descriptor := NS.new(MTL.RenderPipelineDescriptor)
 	pipeline_state_descriptor->colorAttachments()->object(0)->setPixelFormat(.BGRA8Unorm_sRGB)
@@ -165,6 +183,7 @@ app_create :: proc(
 	app.colors = gpu_buffer_create(Color, app.device)
 	app.uvs = gpu_buffer_create(Uv, app.device)
 	app.modes = gpu_buffer_create(Mode, app.device)
+	app.tex_ids = gpu_buffer_create(TexID, app.device)
 
 	SDL.ShowWindow(app.window)
 
@@ -229,6 +248,7 @@ app_pre_render :: proc(app: ^App) {
 	gpu_buffer_clear(&app.colors)
 	gpu_buffer_clear(&app.uvs)
 	gpu_buffer_clear(&app.modes)
+	gpu_buffer_clear(&app.tex_ids)
 	clear(&app.render_calls)
 }
 
@@ -239,16 +259,27 @@ app_render :: proc(app: ^App) {
 	gpu_buffer_submit(&app.colors)
 	gpu_buffer_submit(&app.uvs)
 	gpu_buffer_submit(&app.modes)
+	gpu_buffer_submit(&app.tex_ids)
 
 	app.frame_context.encoder->setRenderPipelineState(app.pipeline_state)
 	app.frame_context.encoder->setVertexBuffer(app.positions.gpu, 0, 0)
 	app.frame_context.encoder->setVertexBuffer(app.colors.gpu, 0, 1)
 	app.frame_context.encoder->setVertexBuffer(app.uvs.gpu, 0, 2)
 	app.frame_context.encoder->setVertexBuffer(app.modes.gpu, 0, 3)
+	app.frame_context.encoder->setVertexBuffer(app.tex_ids.gpu, 0, 4)
 
 	if app.font.texture != nil {
 		app.frame_context.encoder->setFragmentTexture(app.font.texture, 0)
 		app.frame_context.encoder->setFragmentSamplerState(app.font.sampler, 0)
+	}
+
+	app.frame_context.encoder->setFragmentBuffer(app.texture_manager.arguments, 0, 0)
+	if len(app.texture_manager.textures) > 0 {
+		app.frame_context.encoder->useResourcesStages(
+			transmute([]^MTL.Resource)app.texture_manager.textures[:],
+			{.Read},
+			{.Fragment},
+		)
 	}
 
 	for render_call in app.render_calls {
@@ -281,6 +312,11 @@ app_submit :: proc(app: ^App) {
 			app.frame_count = 0
 			app.start_time = time.now()
 		}
+	}
+
+	// dt
+	{
+		app.dt = cast(f32)time.duration_seconds(time.since(app.frame_start))
 	}
 }
 

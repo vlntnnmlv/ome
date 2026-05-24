@@ -1,10 +1,7 @@
 package ome
 
 import "core:fmt"
-import "core:math/rand"
 import "core:time"
-
-import SDL "vendor:sdl3"
 
 UIOrderBook :: struct {
 	root:       UIPanelHandle,
@@ -103,7 +100,7 @@ orderbook_sync :: proc(sync: ^OrderbookViewSync) {
 	}
 }
 
-
+rect: Rect
 main :: proc() {
 	// orderbook
 	account_ids: [5]u64 = {0, 1, 2, 3, 4}
@@ -119,64 +116,33 @@ main :: proc() {
 	height: f32 = 720
 
 	ok := app_create("OME", cast(i32)width, cast(i32)height)
-	if !ok {
-		return
-	}
-
+	if !ok do return
 	defer app_close(app)
 
 	// load assets
 	assets_load_font("assets/Iosevka.ttf", {32, 64})
 
+	h := texture_create(app.texture_manager, "assets/highfive.jpg")
+
 	// setup user inut
-	app.key_callbacks[SDL.K_SPACE] = proc(app: ^App) {
-		ui_create_panel(
-			&app.ui_context,
-			app.ui_context.root_handle,
-			Rect {
-				rand.float32_range(0, cast(f32)app.width),
-				rand.float32_range(0, cast(f32)app.height),
-				100,
-				100,
-			},
-		)
-	}
+	// app.key_callbacks[SDL.K_W] = proc(app: ^App) {rect.y += app.dt * 100}
+	// app.key_callbacks[SDL.K_A] = proc(app: ^App) {rect.x -= app.dt * 100}
+	// app.key_callbacks[SDL.K_S] = proc(app: ^App) {rect.y -= app.dt * 100}
+	// app.key_callbacks[SDL.K_D] = proc(app: ^App) {rect.x += app.dt * 100}
 
 	// build ui
 	app_init_ui(app)
 
-	// ui_orderbook: ^UIOrderBook = ui_create_orderbook(
-	// 	&app.ui_context,
-	// 	app.ui_context.root_handle,
-	// 	app.ui_context.panels[app.ui_context.root_handle].rect,
-	// )
-
-	// fps_t := ui_create_text(
-	// 	&app.ui_context,
-	// 	app.ui_context.root_handle,
-	// 	Rect{20, 0, 0, 0},
-	// 	"0",
-	// 	{.START, 1000, .START, 20}, // TODO: Fix text layoting
-	// 	Color{1, 0, 0, 1},
-	// )
-
-	// // sync data and view
-	// sync: OrderbookViewSync = {&app.ui_context, &orderbook, ui_orderbook}
-
 	// start the event loop
 	for !app.quit {
 		app_process_events(app)
-		// orderbook_fill(&orderbook, &account_ids, 100)
-		// orderbook_fill(&orderbook, &account_ids, 90, true)
-		// orderbook_sync(&sync)
-		// ui_set_text(&app.ui_context, fps_t, fmt.tprintf("%.2f", app.fps))
 		app_pre_render(app)
-		// ui_validate(&app.ui_context, app.ui_context.root_handle)
 
 		render_line([2]f32{0, 0}, [2]f32{width, height}, Color{1, 0, 0, 1})
 		render_segments([][2]f32{{0, 0}, {100, 400}, {200, 300}, {150, 100}}, Color{1, 1, 0, 1})
-		render_rect(Rect{300, 300, 400, 400}, Color{1, 1, 1, 1})
+		render_rect(Rect{rect.x, rect.y, 100, 100}, Color{1, 1, 1, 1})
 		render_text("Hello world!", 256, Rect{300, 300, 200, 200}, Color{0, 0, 0, 1})
+		render_texture(h, Rect{50, 50, 200, 200})
 
 		app_render(app)
 		app_submit(app)

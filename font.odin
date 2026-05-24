@@ -24,19 +24,12 @@ CharAtStart :: 32
 CharAmount :: 95
 
 FontError :: enum {
-	FILE_ERROR,
-	PACKING_ERROR,
+	None = 0,
+	File_Error,
+	Packing_Error,
 }
 
 INITIAL_BITMAP_SIZE :: 1024
-
-asset_pack_font :: proc() {
-	for {
-		ok, err := assets_load_font_internal()
-		if ok || err == .FILE_ERROR do break
-		if err == .PACKING_ERROR do app.font.bitmap_size *= 2
-	}
-}
 
 assets_load_font :: proc(path: string, sizes: []f32) {
 	app.font.path = path
@@ -44,23 +37,28 @@ assets_load_font :: proc(path: string, sizes: []f32) {
 
 	for size in sizes do append(&app.font.sizes, size)
 
-	asset_pack_font()
+	assets_pack_font()
 }
 
-asset_update_font_sizes :: proc(size: f32) {
-	append(&app.font.sizes, size)
-	asset_pack_font()
+assets_pack_font :: proc() {
+	for {
+		err := assets_pack_font_internal()
+		if err == .Packing_Error do app.font.bitmap_size *= 2
+		else do break
+	}
 }
 
-asset_get_or_update_font_size :: proc(size: f32) -> f32 {
-	if !slice.contains(app.font.sizes[:], size) do asset_update_font_sizes(size)
-	return size
+assets_validate_font_size :: proc(size: f32) {
+	if !slice.contains(app.font.sizes[:], size) {
+		append(&app.font.sizes, size)
+		assets_pack_font()
+	}
 }
 
-assets_load_font_internal :: proc() -> (bool, FontError) {
+assets_pack_font_internal :: proc() -> FontError {
 	font_data, err := os.read_entire_file_from_path(app.font.path, context.allocator)
 	defer delete(font_data, context.allocator)
-	if err != nil do return false, .FILE_ERROR
+	if err != nil do return .File_Error
 
 	// clean exisiting font data
 	if app.font.texture != nil {
@@ -84,7 +82,7 @@ assets_load_font_internal :: proc() -> (bool, FontError) {
 		app.font.char_data_new[size] = make([]STBTT.packedchar, CharAmount)
 	}
 
-	// pack font}
+	// pack font
 	pack_context := new(STBTT.pack_context, context.temp_allocator)
 	STBTT.PackBegin(
 		pack_context,
@@ -107,7 +105,7 @@ assets_load_font_internal :: proc() -> (bool, FontError) {
 			&app.font.char_data_new[app.font.sizes[i]][0],
 		); ok != 1 {
 			STBTT.PackEnd(pack_context)
-			return false, .PACKING_ERROR
+			return .Packing_Error
 		}
 	}
 	STBTT.PackEnd(pack_context)
@@ -152,5 +150,5 @@ assets_load_font_internal :: proc() -> (bool, FontError) {
 		pack_context.stride_in_bytes,
 	)
 
-	return true, nil
+	return .None
 }

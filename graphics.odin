@@ -26,6 +26,9 @@ graphics_add_points :: proc(points: [][2]f32, color: Maybe(Color) = nil, fill: b
 	zero_modes := make([]Mode, points_count, context.temp_allocator)
 	gpu_buffer_append(&app.modes, zero_modes[:])
 
+	zero_tex_ids := make([]TexID, points_count, context.temp_allocator)
+	gpu_buffer_append(&app.tex_ids, zero_tex_ids[:])
+
 	append(&app.render_calls, RenderCall{type = type, start = start, count = points_count})
 }
 
@@ -44,11 +47,14 @@ graphics_add_quad :: proc(rect: Rect, color: Maybe(Color) = nil) {
 	zero_modes := [6]Mode{}
 	gpu_buffer_append(&app.modes, zero_modes[:])
 
+	zero_tex_ids := [6]TexID{}
+	gpu_buffer_append(&app.tex_ids, zero_tex_ids[:])
+
 	append(&app.render_calls, RenderCall{type = .Triangle, start = start, count = points_count})
 }
 
-measure_text :: proc(text: string, font_size: f32) -> [2]f32 {
-	r_font_size := asset_get_or_update_font_size(font_size)
+text_measure :: proc(text: string, font_size: f32) -> [2]f32 {
+	assets_validate_font_size(font_size)
 
 	x, y, max_x: f32 = 0, 0, 0
 	for ch in text {
@@ -56,7 +62,7 @@ measure_text :: proc(text: string, font_size: f32) -> [2]f32 {
 
 		quad: STBTT.aligned_quad
 		STBTT.GetPackedQuad(
-			&app.font.char_data_new[r_font_size][0],
+			&app.font.char_data_new[font_size][0],
 			app.font.bitmap_size,
 			app.font.bitmap_size,
 			cast(i32)ch - 32,
@@ -68,11 +74,11 @@ measure_text :: proc(text: string, font_size: f32) -> [2]f32 {
 		max_x = max(x, max_x)
 	}
 
-	return {max_x, r_font_size}
+	return {max_x, font_size}
 }
 
-fit_text :: proc(text: string, font_size: f32, rect: Rect) -> f32 {
-	size := measure_text(text, font_size)
+text_fit :: proc(text: string, font_size: f32, rect: Rect) -> f32 {
+	size := text_measure(text, font_size)
 	scale_x := rect.w / size.x
 	scale_y := rect.h / size.y
 	scale := min(scale_x, scale_y)
@@ -80,17 +86,18 @@ fit_text :: proc(text: string, font_size: f32, rect: Rect) -> f32 {
 }
 
 graphics_add_text :: proc(text: string, font_size: f32, rect: Rect, color: Maybe(Color) = nil) {
-	r_font_size := asset_get_or_update_font_size(fit_text(text, font_size, rect))
+	real_font_size := text_fit(text, font_size, rect)
+	assets_validate_font_size(real_font_size)
 
 	cx := rect.x
 	cy := cast(f32)app.height - rect.y
 
 	for ch in text {
-		if ch < 32 || ch >= 128 do continue
+		if ch < CharAtStart || ch > CharAtStart + CharAmount do continue
 
 		q: STBTT.aligned_quad
 		STBTT.GetPackedQuad(
-			&app.font.char_data_new[r_font_size][0],
+			&app.font.char_data_new[real_font_size][0],
 			app.font.bitmap_size,
 			app.font.bitmap_size,
 			cast(i32)ch - 32,
@@ -126,6 +133,41 @@ graphics_add_text :: proc(text: string, font_size: f32, rect: Rect, color: Maybe
 		gpu_buffer_append(&app.uvs, uvs[:])
 		gpu_buffer_append(&app.modes, mode[:])
 
+		zero_tex_ids := [6]TexID{}
+		gpu_buffer_append(&app.tex_ids, zero_tex_ids[:])
+
 		append(&app.render_calls, RenderCall{type = .Triangle, start = start, count = 6})
 	}
+}
+
+graphics_add_texture :: proc(
+	texture_handle: TextureHandle,
+	rect: Rect,
+	color: Maybe(Color) = nil,
+) {
+	start := len(app.positions.cpu)
+	positions_data := rect2vertices(rect)
+	points_count := len(positions_data)
+	gpu_buffer_append(&app.positions, positions_data[:])
+
+	colors_data := get_n_colors(color, points_count)
+	gpu_buffer_append(&app.colors, colors_data[:])
+
+	uvs := [6]Uv{{0, 1}, {0, 0}, {1, 0}, {0, 1}, {1, 0}, {1, 1}}
+	gpu_buffer_append(&app.uvs, uvs[:])
+
+	modes := [6]Mode{2, 2, 2, 2, 2, 2}
+	gpu_buffer_append(&app.modes, modes[:])
+
+	tex_ids := [6]TexID {
+		TexID(texture_handle),
+		TexID(texture_handle),
+		TexID(texture_handle),
+		TexID(texture_handle),
+		TexID(texture_handle),
+		TexID(texture_handle),
+	}
+	gpu_buffer_append(&app.tex_ids, tex_ids[:])
+
+	append(&app.render_calls, RenderCall{type = .Triangle, start = start, count = points_count})
 }

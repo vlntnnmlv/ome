@@ -2,6 +2,8 @@
 
 package ome
 
+// TODO: Figure out coordinate system, top left or bottom left?
+
 get_n_colors_rainbow :: proc(count: int) -> []Color {
 	colors: [dynamic]Color = {}
 	for i in 0 ..< count {

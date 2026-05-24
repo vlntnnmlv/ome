@@ -16,8 +16,12 @@ render_text :: proc(text: string, font_size: f32, rect: Rect, color: Maybe(Color
 	graphics_add_text(text, font_size, rect, color)
 }
 
-render_texture :: proc(rect: Rect, _: any) {
-	/* TODO: Add texture rendering */
+render_texture :: proc(
+	handle: TextureHandle,
+	rect: Rect,
+	color: Maybe(Color) = Color{1, 1, 1, 1},
+) {
+	graphics_add_texture(handle, rect, color)
 }
 
 render_mesh :: proc(_: any) {
