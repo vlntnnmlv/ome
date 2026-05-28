@@ -130,7 +130,7 @@ app_create :: proc(
 	app.compile_options = NS.new(MTL.CompileOptions)
 
 	shader_file, shader_file_load_error := os.read_entire_file_from_path(
-		"assets/shader.metal",
+		"assets/shaders/shader.metal",
 		context.allocator,
 	)
 
@@ -190,6 +190,8 @@ app_create :: proc(
 	app.clear_color = MTL.ClearColor{clear_color.r, clear_color.g, clear_color.b, clear_color.a}
 	app.key_callbacks = make(map[u64]KeyCallback)
 	app.quit = false
+
+	app.start_time = time.now()
 
 	return true
 }
@@ -322,6 +324,7 @@ app_submit :: proc(app: ^App) {
 
 app_close :: proc(app: ^App) {
 	ui_context_free(&app.ui_context)
+
 	app.compile_options->release()
 	SDL.DestroyWindow(app.window)
 	SDL.Quit()

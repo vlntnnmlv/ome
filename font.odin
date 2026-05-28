@@ -10,15 +10,7 @@ import MTL "vendor:darwin/Metal"
 import STBI "vendor:stb/image"
 import STBTT "vendor:stb/truetype"
 
-Font :: struct {
-	path:          string,
-	bitmap_size:   i32,
-	bitmap:        []u8,
-	sizes:         [dynamic]f32,
-	char_data_new: map[f32][]STBTT.packedchar,
-	texture:       ^MTL.Texture,
-	sampler:       ^MTL.SamplerState,
-}
+INITIAL_BITMAP_SIZE :: 1024
 
 CharAtStart :: 32
 CharAmount :: 95
@@ -29,7 +21,15 @@ FontError :: enum {
 	Packing_Error,
 }
 
-INITIAL_BITMAP_SIZE :: 1024
+Font :: struct {
+	path:          string,
+	bitmap_size:   i32,
+	bitmap:        []u8,
+	sizes:         [dynamic]f32,
+	char_data_new: map[f32][]STBTT.packedchar,
+	texture:       ^MTL.Texture,
+	sampler:       ^MTL.SamplerState,
+}
 
 assets_load_font :: proc(path: string, sizes: []f32) {
 	app.font.path = path

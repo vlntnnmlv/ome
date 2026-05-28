@@ -1,5 +1,3 @@
-#+private
-
 package ome
 
 import "core:mem"

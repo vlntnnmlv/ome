@@ -19,9 +19,10 @@ render_text :: proc(text: string, font_size: f32, rect: Rect, color: Maybe(Color
 render_texture :: proc(
 	handle: TextureHandle,
 	rect: Rect,
-	color: Maybe(Color) = Color{1, 1, 1, 1},
+	color: Maybe(Color) = nil,
+	slice_offset: Maybe(RectOffset) = nil,
 ) {
-	graphics_add_texture(handle, rect, color)
+	graphics_add_texture(handle, rect, color, slice_offset)
 }
 
 render_mesh :: proc(_: any) {
