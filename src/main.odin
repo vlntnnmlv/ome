@@ -1,0 +1,66 @@
+package ome
+
+import "core:fmt"
+import "core:log"
+import "core:mem"
+main :: proc() {
+	// system
+	tracking_allocator: mem.Tracking_Allocator
+	mem.tracking_allocator_init(&tracking_allocator, context.allocator)
+	context.allocator = mem.tracking_allocator(&tracking_allocator)
+
+	defer {
+		if len(tracking_allocator.allocation_map) > 0 {
+			fmt.eprintf(
+				"=== %v allocations not freed: ===\n",
+				len(tracking_allocator.allocation_map),
+			)
+			for _, entry in tracking_allocator.allocation_map {
+				fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
+			}
+		}
+
+		mem.tracking_allocator_destroy(&tracking_allocator)
+	}
+
+	context.logger = log.create_console_logger()
+	defer log.destroy_console_logger(context.logger)
+
+
+	// window
+	width: f32 = 1080
+	height: f32 = 720
+
+	app, ok := app_create("OME", cast(i32)width, cast(i32)height)
+	if !ok do return
+	defer app_close(app)
+
+	// load assets
+	assets_load_font(app, "assets/fonts/Iosevka.ttf", {32, 64})
+
+	h := texture_create(app, app.texture_manager, "assets/textures/frame.png")
+
+	// setup user inut
+	// app.key_callbacks[SDL.K_W] = proc(app: ^App) {rect.y += app.dt * 100}
+
+	// build ui
+	app_init_ui(app)
+
+	// start the event loop
+	for !app.quit {
+		app_process_events(app)
+		app_pre_render(app)
+
+		// render_line([2]f32{0, 0}, [2]f32{width, height}, Color{1, 0, 0, 1})
+		// render_segments([][2]f32{{0, 0}, {100, 400}, {200, 300}, {150, 100}}, Color{1, 1, 0, 1})
+		// render_text("Hello world!", 256, Rect{300, 300, 200, 200}, Color{0, 0, 0, 1})
+		render_texture(app, h, Rect{0, 0, 100, 100}, Color{1, 1, 1, 1}, RectOffset{16, 16, 16, 16})
+		render_texture(app, h, Rect{100, 100, 100, 100}, Color{1, 1, 1, 1})
+		render_rect(app, Rect{200, 200, 100, 100}, Color{1, 0, 1, 1})
+
+		app_render(app)
+		app_submit(app)
+
+		free_all(context.temp_allocator)
+	}
+}

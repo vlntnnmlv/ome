@@ -23,7 +23,11 @@ texture_manager_create :: proc() -> ^TextureManager {
 	return texture_manager
 }
 
-texture_manager_init :: proc(texture_manager: ^TextureManager, fragment_fn: ^MTL.Function) {
+texture_manager_init :: proc(
+	app: ^App,
+	texture_manager: ^TextureManager,
+	fragment_fn: ^MTL.Function,
+) {
 	samp_desc := NS.new(MTL.SamplerDescriptor)
 	samp_desc->setMinFilter(.Linear)
 	samp_desc->setMagFilter(.Linear)
@@ -44,10 +48,15 @@ texture_manager_rebuild :: proc(texture_manager: ^TextureManager) {
 	for texture, i in texture_manager.textures {
 		texture_manager.encoder->setTexture(texture, cast(NS.UInteger)i)
 	}
+
 	texture_manager.encoder->setSamplerState(texture_manager.sampler, MAX_TEXTURES)
 }
 
-texture_create :: proc(texture_manager: ^TextureManager, path: string) -> TextureHandle {
+texture_create :: proc(
+	app: ^App,
+	texture_manager: ^TextureManager,
+	path: string,
+) -> TextureHandle {
 	w, h, channels: i32
 	cpath := strings.clone_to_cstring(path)
 	defer delete(cpath)
@@ -74,4 +83,12 @@ texture_create :: proc(texture_manager: ^TextureManager, path: string) -> Textur
 
 	texture_manager_rebuild(texture_manager)
 	return TextureHandle(len(texture_manager.textures) - 1)
+}
+
+texture_manager_delete :: proc(texture_manager: ^TextureManager) {
+	for texture in texture_manager.textures {
+		texture->release()
+	}
+
+	delete(texture_manager.textures)
 }

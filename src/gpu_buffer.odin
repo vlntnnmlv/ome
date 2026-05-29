@@ -16,7 +16,7 @@ GPUBuffer :: struct($T: typeid) {
 gpu_buffer_create :: proc($T: typeid, device: ^MTL.Device) -> GPUBuffer(T) {
 	buffer: GPUBuffer(T)
 	buffer.device = device
-	buffer.cpu = make([dynamic]T, 0, INITIAL_BUFFER_SIZE)
+	buffer.cpu = make([dynamic]T, 0, INITIAL_BUFFER_SIZE, context.allocator)
 	buffer.gpu = buffer.device->newBufferWithLength(INITIAL_BUFFER_SIZE * size_of(T), {})
 	buffer.cap = INITIAL_BUFFER_SIZE
 
@@ -48,15 +48,16 @@ gpu_buffer_append :: proc(buffer: ^GPUBuffer($T), data: []T) {
 	append(&buffer.cpu, ..data)
 }
 
-gpu_buffer_clear :: proc(buffer_managed: ^GPUBuffer($T)) {
-	clear(&buffer_managed.cpu)
+gpu_buffer_clear :: proc(buffer: ^GPUBuffer($T)) {
+	clear(&buffer.cpu)
 }
 
-gpu_buffer_submit :: proc(buffer_managed: ^GPUBuffer($T)) {
-	contents := buffer_managed.gpu->contents()
-	mem.copy(
-		raw_data(contents),
-		raw_data(buffer_managed.cpu),
-		len(buffer_managed.cpu) * size_of(T),
-	)
+gpu_buffer_submit :: proc(buffer: ^GPUBuffer($T)) {
+	contents := buffer.gpu->contents()
+	mem.copy(raw_data(contents), raw_data(buffer.cpu), len(buffer.cpu) * size_of(T))
+}
+
+gpu_buffer_delete :: proc(buffer: ^GPUBuffer($T)) {
+	delete(buffer.cpu)
+	buffer.device->release()
 }

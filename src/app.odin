@@ -1,6 +1,6 @@
 package ome
 
-import "core:fmt"
+import "core:log"
 import "core:os"
 import "core:time"
 
@@ -25,7 +25,7 @@ App :: struct {
 	compile_options: ^MTL.CompileOptions,
 	pipeline_state:  ^MTL.RenderPipelineState,
 	device:          ^MTL.Device,
-	positions:       GPUBuffer(Vertex),
+	vertices:        GPUBuffer(Vertex),
 	colors:          GPUBuffer(Color),
 	render_calls:    [dynamic]RenderCall,
 	clear_color:     MTL.ClearColor,
@@ -69,93 +69,109 @@ RenderCall :: struct {
 	count: int,
 }
 
-app: ^App
-
 app_create :: proc(
 	title: cstring,
 	width: i32,
 	height: i32,
 	clear_color: [4]f64 = {0.1, 0.1, 0.12, 1.0},
-) -> bool {
+) -> (
+	^App,
+	bool,
+) {
 	env := SDL.GetEnvironment()
 	SDL.SetEnvironmentVariable(env, "METAL_DEVICE_WRAPPER_TYPE", "1", false)
 	if ok := SDL.InitSubSystem({.VIDEO}); !ok {
-		return ok
+		log.errorf("SDL Video subsystem couldn't initialize: %v", SDL.GetError())
+		return nil, false
 	}
 
-	app = new(App)
-	app.window = SDL.CreateWindow(
+	window := SDL.CreateWindow(
 		title,
 		width,
 		height,
 		{.HIGH_PIXEL_DENSITY, .HIDDEN, .RESIZABLE, .METAL},
 	)
+	if window == nil {
+		log.errorf("SDL window couldn't initialize: %v", SDL.GetError())
+		return nil, false
+	}
 
 	native_window := (^NS.Window)(
 		SDL.GetPointerProperty(
-			SDL.GetWindowProperties(app.window),
+			SDL.GetWindowProperties(window),
 			SDL.PROP_WINDOW_COCOA_WINDOW_POINTER,
 			nil,
 		),
 	)
-	assert(native_window != nil)
+	if native_window == nil {
+		log.errorf("Couldn't get native window")
+		return nil, false
+	}
+
+	device := MTL.CreateSystemDefaultDevice()
+	if device == nil {
+		log.errorf("Couldn't create default Metal device")
+		return nil, false
+	}
+
+	argument_buffer_support := device->argumentBuffersSupport()
+	if argument_buffer_support != .Tier2 {
+		log.errorf("Argument buffers aren't supported")
+		return nil, false
+	}
 
 	pixel_width, pixel_height: i32
-	SDL.GetWindowSizeInPixels(app.window, &pixel_width, &pixel_height)
-	app.width = pixel_width
-	app.height = pixel_height
-	app.pixel_ratio = f32(pixel_width) / f32(width)
+	SDL.GetWindowSizeInPixels(window, &pixel_width, &pixel_height)
 
-	app.device = MTL.CreateSystemDefaultDevice()
+	swapchain := CA.MetalLayer.layer()
+	swapchain->setDrawableSize(NS.Size{cast(NS.Float)pixel_width, cast(NS.Float)pixel_height})
+	swapchain->setDevice(device)
+	swapchain->setPixelFormat(.BGRA8Unorm_sRGB)
+	swapchain->setFramebufferOnly(true)
+	swapchain->setFrame(native_window->frame())
 
-	argument_buffer_support := app.device->argumentBuffersSupport()
-	if argument_buffer_support != .Tier2 {
-		return false
-	}
-	fmt.println("Tier 2: OK")
-
-	app.swapchain = CA.MetalLayer.layer()
-	app.swapchain->setDrawableSize(NS.Size{cast(NS.Float)pixel_width, cast(NS.Float)pixel_height})
-	app.swapchain->setDevice(app.device)
-	app.swapchain->setPixelFormat(.BGRA8Unorm_sRGB)
-	app.swapchain->setFramebufferOnly(true)
-	app.swapchain->setFrame(native_window->frame())
-
-	native_window->contentView()->setLayer(app.swapchain)
+	native_window->contentView()->setLayer(swapchain)
 	native_window->setOpaque(true)
 	native_window->setBackgroundColor(nil)
 
-	app.command_q = app.device->newCommandQueue()
-
-	app.compile_options = NS.new(MTL.CompileOptions)
+	command_q := device->newCommandQueue()
+	compile_options := NS.new(MTL.CompileOptions)
 
 	shader_file, shader_file_load_error := os.read_entire_file_from_path(
 		"assets/shaders/shader.metal",
-		context.allocator,
+		context.temp_allocator,
 	)
 
-	defer delete(shader_file, context.allocator)
+	defer delete(shader_file, context.temp_allocator)
 	if shader_file_load_error != nil {
-		return false
+		log.errorf(
+			"Couldn't load shader files. Error: %v",
+			os.error_string(shader_file_load_error),
+		)
+		return nil, false
 	}
 
-	program_library, lib_error := app.device->newLibraryWithSource(
+	program_library, lib_error := device->newLibraryWithSource(
 		NS.String.alloc()->initWithOdinString(string(shader_file)),
-		app.compile_options,
+		compile_options,
 	)
 	if lib_error != nil {
-		fmt.eprintln("Shader compile failed:", lib_error->localizedDescription()->odinString())
-		return false
+		log.errorf("Shader compilation failed. Error: %v", lib_error->localizedDescription())
+		return nil, false
 	}
 
 	vertex_program := program_library->newFunctionWithName(NS.AT("vertex_main"))
 	fragment_program := program_library->newFunctionWithName(NS.AT("fragment_main"))
 
-	assert(vertex_program != nil)
-	assert(fragment_program != nil)
+	if vertex_program == nil {
+		log.errorf("Shader vertex function extraction failed.")
+		return nil, false
+	}
 
-	app.texture_manager = texture_manager_create()
-	texture_manager_init(app.texture_manager, fragment_program)
+	if fragment_program == nil {
+		log.errorf("Shader fragment function extraction failed.")
+		return nil, false
+	}
 
 	pipeline_state_descriptor := NS.new(MTL.RenderPipelineDescriptor)
 	pipeline_state_descriptor->colorAttachments()->object(0)->setPixelFormat(.BGRA8Unorm_sRGB)
@@ -171,29 +187,41 @@ app_create :: proc(
 	color_attachments->setDestinationRGBBlendFactor(.OneMinusSourceAlpha)
 	color_attachments->setDestinationAlphaBlendFactor(.OneMinusSourceAlpha)
 
-	pipeline_error: ^NS.Error
-	app.pipeline_state, pipeline_error = app.device->newRenderPipelineState(
-		pipeline_state_descriptor,
-	)
+	pipeline_state, pipeline_error := device->newRenderPipelineState(pipeline_state_descriptor)
 	if pipeline_error != nil {
-		return false
+		log.errorf("Pipeline creation failed. Error: %v", pipeline_error->localizedDescription())
+		return nil, false
 	}
 
-	app.positions = gpu_buffer_create(Vertex, app.device)
+	app := new(App)
+	app.window = window
+	app.device = device
+	app.width = pixel_width
+	app.height = pixel_height
+	app.pixel_ratio = f32(pixel_width) / f32(width)
+	app.swapchain = swapchain
+	app.command_q = command_q
+	app.compile_options = compile_options
+	app.pipeline_state = pipeline_state
+
+	app.vertices = gpu_buffer_create(Vertex, app.device)
 	app.colors = gpu_buffer_create(Color, app.device)
 	app.uvs = gpu_buffer_create(Uv, app.device)
 	app.modes = gpu_buffer_create(Mode, app.device)
 	app.tex_ids = gpu_buffer_create(TexID, app.device)
 
-	SDL.ShowWindow(app.window)
-
+	app.render_calls = make([dynamic]RenderCall)
 	app.clear_color = MTL.ClearColor{clear_color.r, clear_color.g, clear_color.b, clear_color.a}
 	app.key_callbacks = make(map[u64]KeyCallback)
 	app.quit = false
-
 	app.start_time = time.now()
 
-	return true
+	app.texture_manager = texture_manager_create()
+	texture_manager_init(app, app.texture_manager, fragment_program)
+
+	SDL.ShowWindow(window)
+
+	return app, true
 }
 
 app_init_ui :: proc(app: ^App) {
@@ -246,7 +274,7 @@ app_pre_render :: proc(app: ^App) {
 		pass,
 	)
 
-	gpu_buffer_clear(&app.positions)
+	gpu_buffer_clear(&app.vertices)
 	gpu_buffer_clear(&app.colors)
 	gpu_buffer_clear(&app.uvs)
 	gpu_buffer_clear(&app.modes)
@@ -255,16 +283,16 @@ app_pre_render :: proc(app: ^App) {
 }
 
 app_render :: proc(app: ^App) {
-	// app_add_ui_panel(app, &app.ui_context, app.ui_context.root_handle)
+	app_add_ui_panel(app, &app.ui_context, app.ui_context.root_handle)
 
-	gpu_buffer_submit(&app.positions)
+	gpu_buffer_submit(&app.vertices)
 	gpu_buffer_submit(&app.colors)
 	gpu_buffer_submit(&app.uvs)
 	gpu_buffer_submit(&app.modes)
 	gpu_buffer_submit(&app.tex_ids)
 
 	app.frame_context.encoder->setRenderPipelineState(app.pipeline_state)
-	app.frame_context.encoder->setVertexBuffer(app.positions.gpu, 0, 0)
+	app.frame_context.encoder->setVertexBuffer(app.vertices.gpu, 0, 0)
 	app.frame_context.encoder->setVertexBuffer(app.colors.gpu, 0, 1)
 	app.frame_context.encoder->setVertexBuffer(app.uvs.gpu, 0, 2)
 	app.frame_context.encoder->setVertexBuffer(app.modes.gpu, 0, 3)
@@ -325,7 +353,20 @@ app_submit :: proc(app: ^App) {
 app_close :: proc(app: ^App) {
 	ui_context_free(&app.ui_context)
 
+	assets_delete_font(&app.font)
+	texture_manager_delete(app.texture_manager)
+	free(app.texture_manager)
+
+	delete(app.render_calls)
+	gpu_buffer_delete(&app.vertices)
+	gpu_buffer_delete(&app.uvs)
+	gpu_buffer_delete(&app.colors)
+	gpu_buffer_delete(&app.modes)
+	gpu_buffer_delete(&app.tex_ids)
+
 	app.compile_options->release()
 	SDL.DestroyWindow(app.window)
 	SDL.Quit()
+
+	free(app)
 }

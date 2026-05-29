@@ -1,8 +1,8 @@
 package ome
 
 // TODO: Get rid of
-get_n_colors_rainbow :: proc(count: int) -> []Color {
-	colors: [dynamic]Color = {}
+get_n_colors_rainbow :: proc(count: int) -> [dynamic]Color {
+	colors := make([dynamic]Color, context.temp_allocator)
 	for i in 0 ..< count {
 		append(
 			&colors,
@@ -10,19 +10,19 @@ get_n_colors_rainbow :: proc(count: int) -> []Color {
 		)
 	}
 
-	return colors[:]
+	return colors
 }
 
-get_n_colors_dupe :: proc(color: Color, count: int) -> []Color {
-	colors: [dynamic]Color = {}
+get_n_colors_dupe :: proc(color: Color, count: int) -> [dynamic]Color {
+	colors: [dynamic]Color = make([dynamic]Color, context.temp_allocator)
 	for _ in 0 ..< count {
 		append(&colors, color)
 	}
 
-	return colors[:]
+	return colors
 }
 
-get_n_colors :: proc(color: Maybe(Color), count: int) -> []Color {
+get_n_colors :: proc(color: Maybe(Color), count: int) -> [dynamic]Color {
 	if real_color, ok := color.?; !ok {
 		return get_n_colors_rainbow(count)
 	} else {
@@ -34,7 +34,7 @@ VERTICES_PER_QUAD :: 6
 VERTICES_PER_NINE_SLICED_QUAD :: 9 * VERTICES_PER_QUAD
 UNIT_RECT :: Rect{0, 0, 1, 1}
 
-screen_to_world :: proc(x: f32, y: f32) -> [2]f32 {
+screen_to_world :: proc(app: ^App, x: f32, y: f32) -> [2]f32 {
 	px := x * app.pixel_ratio
 	py := y * app.pixel_ratio
 	return {2 * px / cast(f32)app.width - 1, 1 - 2 * py / cast(f32)app.height}
@@ -58,10 +58,10 @@ rect_split_to_grid :: proc(rect: Rect, offset: RectOffset) -> [9]Rect {
 	return cells
 }
 
-rect_to_vertices_nine_slice :: proc(rect: Rect, offset: RectOffset) -> [dynamic]Vertex {
+rect_to_vertices_nine_slice :: proc(app: ^App, rect: Rect, offset: RectOffset) -> [dynamic]Vertex {
 	vertices := make([dynamic]Vertex, VERTICES_PER_NINE_SLICED_QUAD, context.temp_allocator)
 	for cell, i in rect_split_to_grid(rect, offset) {
-		rect_vertices := rect_to_vertices(cell)
+		rect_vertices := rect_to_vertices(app, cell)
 		copy(vertices[i * VERTICES_PER_QUAD:], rect_vertices[:])
 	}
 	return vertices
@@ -83,12 +83,12 @@ offset_to_uvs_nine_slice :: proc(offset: RectOffset, tw, th: f32) -> [dynamic]Uv
 	return uvs
 }
 
-rect_to_vertices :: proc(rect: Rect) -> [dynamic]Vertex {
+rect_to_vertices :: proc(app: ^App, rect: Rect) -> [dynamic]Vertex {
 	vertices := make([dynamic]Vertex, VERTICES_PER_QUAD, context.temp_allocator)
-	tl := point_to_vertex(rect.x, rect.y)
-	bl := point_to_vertex(rect.x, rect.y + rect.h)
-	br := point_to_vertex(rect.x + rect.w, rect.y + rect.h)
-	tr := point_to_vertex(rect.x + rect.w, rect.y)
+	tl := point_to_vertex(app, rect.x, rect.y)
+	bl := point_to_vertex(app, rect.x, rect.y + rect.h)
+	br := point_to_vertex(app, rect.x + rect.w, rect.y + rect.h)
+	tr := point_to_vertex(app, rect.x + rect.w, rect.y)
 
 	vertices[0] = tl
 	vertices[1] = bl
@@ -123,21 +123,21 @@ point_to_vertex :: proc {
 	point_to_vertex_array,
 }
 
-point_to_vertex_xy :: proc(x: f32, y: f32) -> Vertex {
-	tmp := screen_to_world(x, y)
+point_to_vertex_xy :: proc(app: ^App, x: f32, y: f32) -> Vertex {
+	tmp := screen_to_world(app, x, y)
 	return {tmp.x, tmp.y, 0, 1}
 }
 
-point_to_vertex_array :: proc(point: [2]f32) -> Vertex {
-	tmp := screen_to_world(point.x, point.y)
+point_to_vertex_array :: proc(app: ^App, point: [2]f32) -> Vertex {
+	tmp := screen_to_world(app, point.x, point.y)
 	return {tmp.x, tmp.y, 0, 1}
 }
 
-points_to_vertices :: proc(points: [][2]f32) -> [dynamic]Vertex {
+points_to_vertices :: proc(app: ^App, points: [][2]f32) -> [dynamic]Vertex {
 	vertices := make([dynamic]Vertex, context.temp_allocator)
 
 	for point in points {
-		append(&vertices, point_to_vertex(point.x, point.y))
+		append(&vertices, point_to_vertex(app, point.x, point.y))
 	}
 
 	return vertices

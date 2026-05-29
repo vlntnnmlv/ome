@@ -55,8 +55,8 @@ ui_context_init :: proc(ui_context: ^UIContext) {
 }
 
 ui_context_free :: proc(ui_context: ^UIContext) {
-	clear(&ui_context.panels)
-	mem.dynamic_pool_free_all(&ui_context.arena)
+	delete(ui_context.panels)
+	mem.dynamic_pool_destroy(&ui_context.arena)
 }
 
 @(private = "file")
@@ -278,26 +278,24 @@ ui_validate :: proc(ui_context: ^UIContext, root_handle: UIPanelHandle) {
 	}
 }
 
-// app_add_ui_panel :: proc(window: ^App, ui_context: ^UIContext, handle: UIPanelHandle) {
-// 	panel := ui_context.panels[handle]
-
-// 	switch spec in panel.spec {
-// 	case UIText:
-// 		graphics_add_text(
-// 			window,
-// 			panel.world_rect,
-// 			strings.to_string(spec.builder^),
-// 			panel.world_rect.x,
-// 			panel.world_rect.y,
-// 			panel.color,
-// 		)
-// 		strings.builder_reset(spec.builder)
-// 	case UIStack:
-// 	case nil:
-// 		graphics_add_quad(panel.world_rect, panel.color)
-// 	}
-
-// 	for child in panel.children_handles {
-// 		app_add_ui_panel(window, ui_context, child)
-// 	}
-// }
+app_add_ui_panel :: proc(window: ^App, ui_context: ^UIContext, handle: UIPanelHandle) {
+	// panel := ui_context.panels[handle]
+	// switch spec in panel.spec {
+	// case UIText:
+	// 	graphics_add_text(
+	// 		window,
+	// 		panel.world_rect,
+	// 		strings.to_string(spec.builder^),
+	// 		panel.world_rect.x,
+	// 		panel.world_rect.y,
+	// 		panel.color,
+	// 	)
+	// 	strings.builder_reset(spec.builder)
+	// case UIStack:
+	// case nil:
+	// 	graphics_add_quad(panel.world_rect, panel.color)
+	// }
+	// for child in panel.children_handles {
+	// 	app_add_ui_panel(window, ui_context, child)
+	// }
+}

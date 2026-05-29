@@ -22,42 +22,44 @@ FontError :: enum {
 }
 
 Font :: struct {
-	path:          string,
-	bitmap_size:   i32,
-	bitmap:        []u8,
-	sizes:         [dynamic]f32,
-	char_data_new: map[f32][]STBTT.packedchar,
-	texture:       ^MTL.Texture,
-	sampler:       ^MTL.SamplerState,
+	path:        string,
+	bitmap_size: i32,
+	bitmap:      []u8,
+	sizes:       [dynamic]f32,
+	char_data:   map[f32][]STBTT.packedchar,
+	texture:     ^MTL.Texture,
+	sampler:     ^MTL.SamplerState,
 }
 
-assets_load_font :: proc(path: string, sizes: []f32) {
+assets_load_font :: proc(app: ^App, path: string, sizes: []f32) {
 	app.font.path = path
 	app.font.bitmap_size = INITIAL_BITMAP_SIZE
 
+	app.font.sizes = make([dynamic]f32)
+
 	for size in sizes do append(&app.font.sizes, size)
 
-	assets_pack_font()
+	assets_pack_font(app)
 }
 
-assets_pack_font :: proc() {
+assets_pack_font :: proc(app: ^App) {
 	for {
-		err := assets_pack_font_internal()
+		err := assets_pack_font_internal(app)
 		if err == .Packing_Error do app.font.bitmap_size *= 2
 		else do break
 	}
 }
 
-assets_validate_font_size :: proc(size: f32) {
+assets_validate_font_size :: proc(app: ^App, size: f32) {
 	if !slice.contains(app.font.sizes[:], size) {
 		append(&app.font.sizes, size)
-		assets_pack_font()
+		assets_pack_font(app)
 	}
 }
 
-assets_pack_font_internal :: proc() -> FontError {
-	font_data, err := os.read_entire_file_from_path(app.font.path, context.allocator)
-	defer delete(font_data, context.allocator)
+assets_pack_font_internal :: proc(app: ^App) -> FontError {
+	font_data, err := os.read_entire_file_from_path(app.font.path, context.temp_allocator)
+	defer delete(font_data, context.temp_allocator)
 	if err != nil do return .File_Error
 
 	// clean exisiting font data
@@ -70,16 +72,16 @@ assets_pack_font_internal :: proc() -> FontError {
 		app.font.sampler = nil
 	}
 	if app.font.bitmap != nil do delete(app.font.bitmap)
-	if app.font.char_data_new != nil {
-		for _, &char_data in app.font.char_data_new do delete(char_data)
-		delete(app.font.char_data_new)
+	if app.font.char_data != nil {
+		for _, &char_data in app.font.char_data do delete(char_data)
+		delete(app.font.char_data)
 	}
 
 	// create empty data
 	app.font.bitmap, err = make([]u8, app.font.bitmap_size * app.font.bitmap_size)
-	app.font.char_data_new = make(map[f32][]STBTT.packedchar)
+	app.font.char_data = make(map[f32][]STBTT.packedchar)
 	for size in app.font.sizes {
-		app.font.char_data_new[size] = make([]STBTT.packedchar, CharAmount)
+		app.font.char_data[size] = make([]STBTT.packedchar, CharAmount)
 	}
 
 	// pack font
@@ -102,7 +104,7 @@ assets_pack_font_internal :: proc() -> FontError {
 			size,
 			CharAtStart,
 			CharAmount,
-			&app.font.char_data_new[app.font.sizes[i]][0],
+			&app.font.char_data[app.font.sizes[i]][0],
 		); ok != 1 {
 			STBTT.PackEnd(pack_context)
 			return .Packing_Error
@@ -138,11 +140,16 @@ assets_pack_font_internal :: proc() -> FontError {
 
 	// DEBUG: save bitmap to .png
 	filename := strings.concatenate(
-		{"debug/", strings.split(filepath.base(app.font.path), ".")[0], ".png"},
+		{
+			"debug/",
+			strings.split(filepath.base(app.font.path), ".", context.temp_allocator)[0],
+			".png",
+		},
+		context.temp_allocator,
 	)
 
 	STBI.write_png(
-		strings.clone_to_cstring(filename),
+		strings.clone_to_cstring(filename, context.temp_allocator),
 		app.font.bitmap_size,
 		app.font.bitmap_size,
 		1,
@@ -151,4 +158,14 @@ assets_pack_font_internal :: proc() -> FontError {
 	)
 
 	return .None
+}
+
+assets_delete_font :: proc(font: ^Font) {
+	for _, &value in font.char_data {
+		delete(value)
+	}
+
+	delete(font.char_data)
+	delete(font.bitmap)
+	delete(font.sizes)
 }
