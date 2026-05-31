@@ -5,35 +5,49 @@ import "core:slice"
 import MTL "vendor:darwin/Metal"
 import STBTT "vendor:stb/truetype"
 
+graphics_append_render_call :: proc(
+	renderer: ^Renderer,
+	type: MTL.PrimitiveType,
+	start, count: int,
+) {
+	mergable := type == .Point || type == .Line || type == .Triangle
+	n := len(renderer.render_calls)
+	if n > 0 && mergable && renderer.render_calls[n - 1].type == type {
+		renderer.render_calls[n - 1].count += count
+	} else {
+		append(&renderer.render_calls, RenderCall{type = type, start = start, count = count})
+	}
+}
+
 graphics_add_points :: proc(
-	app: ^App,
+	renderer: ^Renderer,
 	points: [][2]f32,
 	color: Maybe(Color) = nil,
 	fill: bool = false,
 ) {
-	start := len(app.vertices.cpu)
+	start := len(renderer.vertices.cpu)
 	vertices_count := len(points)
 
-	vertices := points_to_vertices(app, points)
+	vertices := points_to_vertices(renderer.logical_size, points)
 	colors := get_n_colors(color, vertices_count)
 	uvs := make([]Uv, vertices_count, context.temp_allocator)
 	modes := make([]Mode, vertices_count, context.temp_allocator)
 	tex_ids := make([]TexID, vertices_count, context.temp_allocator)
 
-	gpu_buffer_append(&app.vertices, vertices[:])
-	gpu_buffer_append(&app.colors, colors[:])
-	gpu_buffer_append(&app.uvs, uvs[:])
-	gpu_buffer_append(&app.modes, modes[:])
-	gpu_buffer_append(&app.tex_ids, tex_ids[:])
+	gpu_buffer_append(&renderer.vertices, vertices[:])
+	gpu_buffer_append(&renderer.colors, colors[:])
+	gpu_buffer_append(&renderer.uvs, uvs[:])
+	gpu_buffer_append(&renderer.modes, modes[:])
+	gpu_buffer_append(&renderer.tex_ids, tex_ids[:])
 
 	type: MTL.PrimitiveType = .LineStrip
 	if fill do type = .Triangle
-	append(&app.render_calls, RenderCall{type = type, start = start, count = vertices_count})
+	graphics_append_render_call(renderer, type, start, vertices_count)
 }
 
-graphics_add_quad :: proc(app: ^App, rect: Rect, color: Maybe(Color) = nil) {
-	start := len(app.vertices.cpu)
-	vertices := rect_to_vertices(app, rect)
+graphics_add_quad :: proc(renderer: ^Renderer, rect: Rect, color: Maybe(Color) = nil) {
+	start := len(renderer.vertices.cpu)
+	vertices := rect_to_vertices(renderer.logical_size, rect)
 	vertices_count := len(vertices)
 
 	colors := get_n_colors(color, vertices_count)
@@ -41,24 +55,24 @@ graphics_add_quad :: proc(app: ^App, rect: Rect, color: Maybe(Color) = nil) {
 	modes := make([dynamic]Mode, vertices_count, context.temp_allocator)
 	tex_ids := make([dynamic]TexID, vertices_count, context.temp_allocator)
 
-	gpu_buffer_append(&app.vertices, vertices[:])
-	gpu_buffer_append(&app.colors, colors[:])
-	gpu_buffer_append(&app.uvs, uvs[:])
-	gpu_buffer_append(&app.modes, modes[:])
-	gpu_buffer_append(&app.tex_ids, tex_ids[:])
+	gpu_buffer_append(&renderer.vertices, vertices[:])
+	gpu_buffer_append(&renderer.colors, colors[:])
+	gpu_buffer_append(&renderer.uvs, uvs[:])
+	gpu_buffer_append(&renderer.modes, modes[:])
+	gpu_buffer_append(&renderer.tex_ids, tex_ids[:])
 
-	append(&app.render_calls, RenderCall{type = .Triangle, start = start, count = vertices_count})
+	graphics_append_render_call(renderer, .Triangle, start, vertices_count)
 }
 
 graphics_add_text :: proc(
-	app: ^App,
+	renderer: ^Renderer,
 	text: string,
 	font_size: f32,
 	rect: Rect,
 	color: Maybe(Color) = nil,
 ) {
-	real_font_size := text_fit(app, text, font_size, rect)
-	assets_validate_font_size(app, real_font_size)
+	real_font_size := text_fit(renderer, text, font_size, rect)
+	assets_validate_font_size(renderer, real_font_size)
 
 	x := rect.x
 	y := rect.y
@@ -68,9 +82,9 @@ graphics_add_text :: proc(
 
 		quad: STBTT.aligned_quad
 		STBTT.GetPackedQuad(
-			&app.font.char_data[real_font_size][0],
-			app.font.bitmap_size,
-			app.font.bitmap_size,
+			&renderer.font.char_data[real_font_size][0],
+			renderer.font.bitmap_size,
+			renderer.font.bitmap_size,
 			cast(i32)char - 32,
 			&x,
 			&y,
@@ -78,16 +92,11 @@ graphics_add_text :: proc(
 			true,
 		)
 
-		start := len(app.vertices.cpu)
-		vertices := [6]Vertex {
-			point_to_vertex(app, quad.x0, quad.y0),
-			point_to_vertex(app, quad.x0, quad.y1),
-			point_to_vertex(app, quad.x1, quad.y1),
-			point_to_vertex(app, quad.x0, quad.y0),
-			point_to_vertex(app, quad.x1, quad.y1),
-			point_to_vertex(app, quad.x1, quad.y0),
-		}
-		uvs := [6]Uv {
+		start := len(renderer.vertices.cpu)
+		char_rect := Rect{quad.x0, quad.y0, quad.x1 - quad.x0, quad.y1 - quad.y0}
+		vertices := rect_to_vertices(renderer.logical_size, char_rect)
+
+		uvs := [VERTICES_PER_QUAD]Uv {
 			{quad.s0, quad.t0},
 			{quad.s0, quad.t1},
 			{quad.s1, quad.t1},
@@ -95,40 +104,40 @@ graphics_add_text :: proc(
 			{quad.s1, quad.t1},
 			{quad.s1, quad.t0},
 		}
-		colors := get_n_colors(color, 6)
-		modes: [6]Mode = 1
-		tex_ids := [6]TexID{}
+		colors := get_n_colors(color, VERTICES_PER_QUAD)
+		modes: [VERTICES_PER_QUAD]Mode = 1
+		tex_ids := [VERTICES_PER_QUAD]TexID{}
 
-		gpu_buffer_append(&app.vertices, vertices[:])
-		gpu_buffer_append(&app.colors, colors[:])
-		gpu_buffer_append(&app.uvs, uvs[:])
-		gpu_buffer_append(&app.modes, modes[:])
-		gpu_buffer_append(&app.tex_ids, tex_ids[:])
+		gpu_buffer_append(&renderer.vertices, vertices[:])
+		gpu_buffer_append(&renderer.colors, colors[:])
+		gpu_buffer_append(&renderer.uvs, uvs[:])
+		gpu_buffer_append(&renderer.modes, modes[:])
+		gpu_buffer_append(&renderer.tex_ids, tex_ids[:])
 
-		append(&app.render_calls, RenderCall{type = .Triangle, start = start, count = 6})
+		graphics_append_render_call(renderer, .Triangle, start, VERTICES_PER_QUAD)
 	}
 }
 
 graphics_add_texture :: proc(
-	app: ^App,
+	renderer: ^Renderer,
 	texture_handle: TextureHandle,
 	rect: Rect,
 	color: Maybe(Color) = nil,
 	slice_offset: Maybe(RectOffset) = nil,
 ) {
-	start := len(app.vertices.cpu)
+	start := len(renderer.vertices.cpu)
 	positions: [dynamic]Vertex
 	uvs: [dynamic]Uv
 
 	if rslice_offset, ok := slice_offset.?; ok {
-		tex := app.texture_manager.textures[texture_handle]
+		tex := renderer.texture_manager.textures[texture_handle]
 		tw := cast(f32)tex->width()
 		th := cast(f32)tex->height()
 
-		positions = rect_to_vertices_nine_slice(app, rect, rslice_offset)
+		positions = rect_to_vertices_nine_slice(renderer.logical_size, rect, rslice_offset)
 		uvs = offset_to_uvs_nine_slice(rslice_offset, tw, th)
 	} else {
-		positions = rect_to_vertices(app, rect)
+		positions = rect_to_vertices(renderer.logical_size, rect)
 		uvs = rect_to_uvs({0, 0, 1, 1})
 	}
 
@@ -142,11 +151,11 @@ graphics_add_texture :: proc(
 	tex_ids := make([dynamic]TexID, vertices_count, context.temp_allocator)
 	slice.fill(tex_ids[:], TexID(texture_handle))
 
-	gpu_buffer_append(&app.vertices, positions[:])
-	gpu_buffer_append(&app.colors, colors[:])
-	gpu_buffer_append(&app.uvs, uvs[:])
-	gpu_buffer_append(&app.modes, modes[:])
-	gpu_buffer_append(&app.tex_ids, tex_ids[:])
+	gpu_buffer_append(&renderer.vertices, positions[:])
+	gpu_buffer_append(&renderer.colors, colors[:])
+	gpu_buffer_append(&renderer.uvs, uvs[:])
+	gpu_buffer_append(&renderer.modes, modes[:])
+	gpu_buffer_append(&renderer.tex_ids, tex_ids[:])
 
-	append(&app.render_calls, RenderCall{type = .Triangle, start = start, count = vertices_count})
+	graphics_append_render_call(renderer, .Triangle, start, vertices_count)
 }

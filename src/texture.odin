@@ -33,9 +33,9 @@ texture_manager_init :: proc(
 	samp_desc->setMagFilter(.Linear)
 	samp_desc->setSupportArgumentBuffers(true)
 
-	texture_manager.sampler = app.device->newSamplerState(samp_desc)
+	texture_manager.sampler = app.renderer.device->newSamplerState(samp_desc)
 	texture_manager.encoder = fragment_fn->newArgumentEncoder(0)
-	texture_manager.arguments = app.device->newBufferWithLength(
+	texture_manager.arguments = app.renderer.device->newBufferWithLength(
 		texture_manager.encoder->encodedLength(),
 		MTL.ResourceStorageModeShared,
 	)
@@ -73,7 +73,7 @@ texture_create :: proc(
 	desc->setStorageMode(.Shared)
 	desc->setUsage({.ShaderRead})
 
-	texture := app.device->newTextureWithDescriptor(desc)
+	texture := app.renderer.device->newTextureWithDescriptor(desc)
 	region := MTL.Region {
 		origin = {0, 0, 0},
 		size   = {cast(NS.Integer)w, cast(NS.Integer)h, 1},

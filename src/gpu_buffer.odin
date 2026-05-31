@@ -24,8 +24,9 @@ gpu_buffer_create :: proc($T: typeid, device: ^MTL.Device) -> GPUBuffer(T) {
 }
 
 gpu_buffer_append :: proc(buffer: ^GPUBuffer($T), data: []T) {
-	if len(buffer.cpu) + len(data) > buffer.cap {
-		buffer.cap *= 2
+	needed := len(buffer.cpu) + len(data)
+	for needed > buffer.cap {
+		for buffer.cap < needed do buffer.cap *= 2
 
 		// cpu
 		reserve(&buffer.cpu, buffer.cap)
@@ -36,11 +37,11 @@ gpu_buffer_append :: proc(buffer: ^GPUBuffer($T), data: []T) {
 			cast(NS.UInteger)buffer.cap * size_of(T),
 			{},
 		)
-		mem.copy(
-			raw_data(buffer.gpu->contents()),
-			raw_data(old_gpu->contents()),
-			len(buffer.cpu) * size_of(T),
-		)
+		// mem.copy(
+		// 	raw_data(buffer.gpu->contents()),
+		// 	raw_data(old_gpu->contents()),
+		// 	len(buffer.cpu) * size_of(T),
+		// )
 
 		old_gpu->release()
 	}
@@ -59,5 +60,5 @@ gpu_buffer_submit :: proc(buffer: ^GPUBuffer($T)) {
 
 gpu_buffer_delete :: proc(buffer: ^GPUBuffer($T)) {
 	delete(buffer.cpu)
-	buffer.device->release()
+	buffer.gpu->release()
 }

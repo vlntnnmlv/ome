@@ -34,10 +34,8 @@ VERTICES_PER_QUAD :: 6
 VERTICES_PER_NINE_SLICED_QUAD :: 9 * VERTICES_PER_QUAD
 UNIT_RECT :: Rect{0, 0, 1, 1}
 
-screen_to_world :: proc(app: ^App, x: f32, y: f32) -> [2]f32 {
-	px := x * app.pixel_ratio
-	py := y * app.pixel_ratio
-	return {2 * px / cast(f32)app.width - 1, 1 - 2 * py / cast(f32)app.height}
+screen_to_world :: proc(logical_size: [2]i32, x: f32, y: f32) -> [2]f32 {
+	return {2 * x / cast(f32)logical_size.x - 1, 1 - 2 * y / cast(f32)logical_size.y}
 }
 
 rect_split_to_grid :: proc(rect: Rect, offset: RectOffset) -> [9]Rect {
@@ -58,10 +56,14 @@ rect_split_to_grid :: proc(rect: Rect, offset: RectOffset) -> [9]Rect {
 	return cells
 }
 
-rect_to_vertices_nine_slice :: proc(app: ^App, rect: Rect, offset: RectOffset) -> [dynamic]Vertex {
+rect_to_vertices_nine_slice :: proc(
+	logical_size: [2]i32,
+	rect: Rect,
+	offset: RectOffset,
+) -> [dynamic]Vertex {
 	vertices := make([dynamic]Vertex, VERTICES_PER_NINE_SLICED_QUAD, context.temp_allocator)
 	for cell, i in rect_split_to_grid(rect, offset) {
-		rect_vertices := rect_to_vertices(app, cell)
+		rect_vertices := rect_to_vertices(logical_size, cell)
 		copy(vertices[i * VERTICES_PER_QUAD:], rect_vertices[:])
 	}
 	return vertices
@@ -83,12 +85,12 @@ offset_to_uvs_nine_slice :: proc(offset: RectOffset, tw, th: f32) -> [dynamic]Uv
 	return uvs
 }
 
-rect_to_vertices :: proc(app: ^App, rect: Rect) -> [dynamic]Vertex {
+rect_to_vertices :: proc(logical_size: [2]i32, rect: Rect) -> [dynamic]Vertex {
 	vertices := make([dynamic]Vertex, VERTICES_PER_QUAD, context.temp_allocator)
-	tl := point_to_vertex(app, rect.x, rect.y)
-	bl := point_to_vertex(app, rect.x, rect.y + rect.h)
-	br := point_to_vertex(app, rect.x + rect.w, rect.y + rect.h)
-	tr := point_to_vertex(app, rect.x + rect.w, rect.y)
+	tl := point_to_vertex(logical_size, rect.x, rect.y)
+	bl := point_to_vertex(logical_size, rect.x, rect.y + rect.h)
+	br := point_to_vertex(logical_size, rect.x + rect.w, rect.y + rect.h)
+	tr := point_to_vertex(logical_size, rect.x + rect.w, rect.y)
 
 	vertices[0] = tl
 	vertices[1] = bl
@@ -123,21 +125,21 @@ point_to_vertex :: proc {
 	point_to_vertex_array,
 }
 
-point_to_vertex_xy :: proc(app: ^App, x: f32, y: f32) -> Vertex {
-	tmp := screen_to_world(app, x, y)
+point_to_vertex_xy :: proc(logical_size: [2]i32, x: f32, y: f32) -> Vertex {
+	tmp := screen_to_world(logical_size, x, y)
 	return {tmp.x, tmp.y, 0, 1}
 }
 
-point_to_vertex_array :: proc(app: ^App, point: [2]f32) -> Vertex {
-	tmp := screen_to_world(app, point.x, point.y)
+point_to_vertex_array :: proc(logical_size: [2]i32, point: [2]f32) -> Vertex {
+	tmp := screen_to_world(logical_size, point.x, point.y)
 	return {tmp.x, tmp.y, 0, 1}
 }
 
-points_to_vertices :: proc(app: ^App, points: [][2]f32) -> [dynamic]Vertex {
+points_to_vertices :: proc(logical_size: [2]i32, points: [][2]f32) -> [dynamic]Vertex {
 	vertices := make([dynamic]Vertex, context.temp_allocator)
 
 	for point in points {
-		append(&vertices, point_to_vertex(app, point.x, point.y))
+		append(&vertices, point_to_vertex(logical_size, point.x, point.y))
 	}
 
 	return vertices

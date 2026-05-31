@@ -16,18 +16,14 @@ Mode :: distinct u32
 TexID :: distinct u32
 
 App :: struct {
-	width:           i32,
-	height:          i32,
+	logical_height:  i32,
+	logical_width:   i32,
+	pixel_width:     i32,
+	pixel_height:    i32,
 	pixel_ratio:     f32,
 	window:          ^SDL.Window,
 	swapchain:       ^CA.MetalLayer,
-	command_q:       ^MTL.CommandQueue,
 	compile_options: ^MTL.CompileOptions,
-	pipeline_state:  ^MTL.RenderPipelineState,
-	device:          ^MTL.Device,
-	vertices:        GPUBuffer(Vertex),
-	colors:          GPUBuffer(Color),
-	render_calls:    [dynamic]RenderCall,
 	clear_color:     MTL.ClearColor,
 	//
 	// Runtime
@@ -40,17 +36,11 @@ App :: struct {
 	start_time:      time.Time,
 	dt:              f32,
 	//
+	// Rendering
+	renderer:        Renderer,
+	//
 	// UI
 	ui_context:      UIContext,
-	//
-	// Textures
-	texture_manager: ^TextureManager,
-	tex_ids:         GPUBuffer(TexID),
-	//
-	// Fonts
-	uvs:             GPUBuffer(Uv),
-	modes:           GPUBuffer(Mode),
-	font:            Font,
 	//
 	// Resets each frame
 	frame_context:   FrameContext,
@@ -195,29 +185,32 @@ app_create :: proc(
 
 	app := new(App)
 	app.window = window
-	app.device = device
-	app.width = pixel_width
-	app.height = pixel_height
-	app.pixel_ratio = f32(pixel_width) / f32(width)
+	app.logical_width = width
+	app.logical_height = height
+	app.pixel_width = pixel_width
+	app.pixel_height = pixel_height
+	app.pixel_ratio = f32(app.pixel_width) / f32(app.logical_width)
 	app.swapchain = swapchain
-	app.command_q = command_q
 	app.compile_options = compile_options
-	app.pipeline_state = pipeline_state
 
-	app.vertices = gpu_buffer_create(Vertex, app.device)
-	app.colors = gpu_buffer_create(Color, app.device)
-	app.uvs = gpu_buffer_create(Uv, app.device)
-	app.modes = gpu_buffer_create(Mode, app.device)
-	app.tex_ids = gpu_buffer_create(TexID, app.device)
+	app.renderer.device = device
+	app.renderer.command_q = command_q
+	app.renderer.pipeline_state = pipeline_state
+	app.renderer.render_calls = make([dynamic]RenderCall)
+	app.renderer.texture_manager = texture_manager_create()
+	app.renderer.logical_size = {app.logical_width, app.logical_height}
+	app.renderer.vertices = gpu_buffer_create(Vertex, app.renderer.device)
+	app.renderer.colors = gpu_buffer_create(Color, app.renderer.device)
+	app.renderer.uvs = gpu_buffer_create(Uv, app.renderer.device)
+	app.renderer.modes = gpu_buffer_create(Mode, app.renderer.device)
+	app.renderer.tex_ids = gpu_buffer_create(TexID, app.renderer.device)
 
-	app.render_calls = make([dynamic]RenderCall)
 	app.clear_color = MTL.ClearColor{clear_color.r, clear_color.g, clear_color.b, clear_color.a}
 	app.key_callbacks = make(map[u64]KeyCallback)
 	app.quit = false
 	app.start_time = time.now()
 
-	app.texture_manager = texture_manager_create()
-	texture_manager_init(app, app.texture_manager, fragment_program)
+	texture_manager_init(app, app.renderer.texture_manager, fragment_program)
 
 	SDL.ShowWindow(window)
 
@@ -229,7 +222,7 @@ app_init_ui :: proc(app: ^App) {
 	app.ui_context.root_handle = ui_create_panel(
 		&app.ui_context,
 		nil,
-		Rect{0, 0, cast(f32)app.width, cast(f32)app.height},
+		Rect{0, 0, cast(f32)app.pixel_width, cast(f32)app.pixel_height},
 		{.FILL, 0, .FILL, 0},
 		TRANSPARENT_COLOR,
 	)
@@ -243,6 +236,14 @@ app_process_events :: proc(app: ^App) {
 		#partial switch e.type {
 		case .QUIT:
 			app.quit = true
+		case .WINDOW_PIXEL_SIZE_CHANGED:
+			SDL.GetWindowSizeInPixels(app.window, &app.pixel_width, &app.pixel_height)
+			SDL.GetWindowSize(app.window, &app.logical_width, &app.logical_height)
+			app.renderer.logical_size = {app.logical_width, app.logical_height}
+			app.pixel_ratio = f32(app.pixel_width) / f32(app.logical_width)
+			app.swapchain->setDrawableSize(
+				NS.Size{cast(NS.Float)app.pixel_width, cast(NS.Float)app.pixel_height},
+			)
 		case .KEY_DOWN:
 			if e.key.key == SDL.K_ESCAPE {
 				app.quit = true
@@ -269,50 +270,50 @@ app_pre_render :: proc(app: ^App) {
 	color_attachment->setStoreAction(.Store)
 	color_attachment->setTexture(app.frame_context.drawable->texture())
 
-	app.frame_context.command_buffer = app.command_q->commandBuffer()
+	app.frame_context.command_buffer = app.renderer.command_q->commandBuffer()
 	app.frame_context.encoder = app.frame_context.command_buffer->renderCommandEncoderWithDescriptor(
 		pass,
 	)
 
-	gpu_buffer_clear(&app.vertices)
-	gpu_buffer_clear(&app.colors)
-	gpu_buffer_clear(&app.uvs)
-	gpu_buffer_clear(&app.modes)
-	gpu_buffer_clear(&app.tex_ids)
-	clear(&app.render_calls)
+	gpu_buffer_clear(&app.renderer.vertices)
+	gpu_buffer_clear(&app.renderer.colors)
+	gpu_buffer_clear(&app.renderer.uvs)
+	gpu_buffer_clear(&app.renderer.modes)
+	gpu_buffer_clear(&app.renderer.tex_ids)
+	clear(&app.renderer.render_calls)
 }
 
 app_render :: proc(app: ^App) {
 	app_add_ui_panel(app, &app.ui_context, app.ui_context.root_handle)
 
-	gpu_buffer_submit(&app.vertices)
-	gpu_buffer_submit(&app.colors)
-	gpu_buffer_submit(&app.uvs)
-	gpu_buffer_submit(&app.modes)
-	gpu_buffer_submit(&app.tex_ids)
+	gpu_buffer_submit(&app.renderer.vertices)
+	gpu_buffer_submit(&app.renderer.colors)
+	gpu_buffer_submit(&app.renderer.uvs)
+	gpu_buffer_submit(&app.renderer.modes)
+	gpu_buffer_submit(&app.renderer.tex_ids)
 
-	app.frame_context.encoder->setRenderPipelineState(app.pipeline_state)
-	app.frame_context.encoder->setVertexBuffer(app.vertices.gpu, 0, 0)
-	app.frame_context.encoder->setVertexBuffer(app.colors.gpu, 0, 1)
-	app.frame_context.encoder->setVertexBuffer(app.uvs.gpu, 0, 2)
-	app.frame_context.encoder->setVertexBuffer(app.modes.gpu, 0, 3)
-	app.frame_context.encoder->setVertexBuffer(app.tex_ids.gpu, 0, 4)
+	app.frame_context.encoder->setRenderPipelineState(app.renderer.pipeline_state)
+	app.frame_context.encoder->setVertexBuffer(app.renderer.vertices.gpu, 0, 0)
+	app.frame_context.encoder->setVertexBuffer(app.renderer.colors.gpu, 0, 1)
+	app.frame_context.encoder->setVertexBuffer(app.renderer.uvs.gpu, 0, 2)
+	app.frame_context.encoder->setVertexBuffer(app.renderer.modes.gpu, 0, 3)
+	app.frame_context.encoder->setVertexBuffer(app.renderer.tex_ids.gpu, 0, 4)
 
-	if app.font.texture != nil {
-		app.frame_context.encoder->setFragmentTexture(app.font.texture, 0)
-		app.frame_context.encoder->setFragmentSamplerState(app.font.sampler, 0)
+	if app.renderer.font.texture != nil {
+		app.frame_context.encoder->setFragmentTexture(app.renderer.font.texture, 0)
+		app.frame_context.encoder->setFragmentSamplerState(app.renderer.font.sampler, 0)
 	}
 
-	app.frame_context.encoder->setFragmentBuffer(app.texture_manager.arguments, 0, 0)
-	if len(app.texture_manager.textures) > 0 {
+	app.frame_context.encoder->setFragmentBuffer(app.renderer.texture_manager.arguments, 0, 0)
+	if len(app.renderer.texture_manager.textures) > 0 {
 		app.frame_context.encoder->useResourcesStages(
-			transmute([]^MTL.Resource)app.texture_manager.textures[:],
+			transmute([]^MTL.Resource)app.renderer.texture_manager.textures[:],
 			{.Read},
 			{.Fragment},
 		)
 	}
 
-	for render_call in app.render_calls {
+	for render_call in app.renderer.render_calls {
 		app.frame_context.encoder->drawPrimitivesWithInstanceCount(
 			render_call.type,
 			cast(NS.UInteger)render_call.start,
@@ -353,16 +354,17 @@ app_submit :: proc(app: ^App) {
 app_close :: proc(app: ^App) {
 	ui_context_free(&app.ui_context)
 
-	assets_delete_font(&app.font)
-	texture_manager_delete(app.texture_manager)
-	free(app.texture_manager)
+	assets_delete_font(&app.renderer.font)
+	texture_manager_delete(app.renderer.texture_manager)
+	free(app.renderer.texture_manager)
 
-	delete(app.render_calls)
-	gpu_buffer_delete(&app.vertices)
-	gpu_buffer_delete(&app.uvs)
-	gpu_buffer_delete(&app.colors)
-	gpu_buffer_delete(&app.modes)
-	gpu_buffer_delete(&app.tex_ids)
+	delete(app.renderer.render_calls)
+	gpu_buffer_delete(&app.renderer.vertices)
+	gpu_buffer_delete(&app.renderer.uvs)
+	gpu_buffer_delete(&app.renderer.colors)
+	gpu_buffer_delete(&app.renderer.modes)
+	gpu_buffer_delete(&app.renderer.tex_ids)
+	app.renderer.device->release()
 
 	app.compile_options->release()
 	SDL.DestroyWindow(app.window)

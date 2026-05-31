@@ -31,72 +31,72 @@ Font :: struct {
 	sampler:     ^MTL.SamplerState,
 }
 
-assets_load_font :: proc(app: ^App, path: string, sizes: []f32) {
-	app.font.path = path
-	app.font.bitmap_size = INITIAL_BITMAP_SIZE
+assets_load_font :: proc(renderer: ^Renderer, path: string, sizes: []f32) {
+	renderer.font.path = path
+	renderer.font.bitmap_size = INITIAL_BITMAP_SIZE
 
-	app.font.sizes = make([dynamic]f32)
+	renderer.font.sizes = make([dynamic]f32)
 
-	for size in sizes do append(&app.font.sizes, size)
+	for size in sizes do append(&renderer.font.sizes, size)
 
-	assets_pack_font(app)
+	assets_pack_font(renderer)
 }
 
-assets_pack_font :: proc(app: ^App) {
+assets_pack_font :: proc(renderer: ^Renderer) {
 	for {
-		err := assets_pack_font_internal(app)
-		if err == .Packing_Error do app.font.bitmap_size *= 2
+		err := assets_pack_font_internal(renderer)
+		if err == .Packing_Error do renderer.font.bitmap_size *= 2
 		else do break
 	}
 }
 
-assets_validate_font_size :: proc(app: ^App, size: f32) {
-	if !slice.contains(app.font.sizes[:], size) {
-		append(&app.font.sizes, size)
-		assets_pack_font(app)
+assets_validate_font_size :: proc(renderer: ^Renderer, size: f32) {
+	if !slice.contains(renderer.font.sizes[:], size) {
+		append(&renderer.font.sizes, size)
+		assets_pack_font(renderer)
 	}
 }
 
-assets_pack_font_internal :: proc(app: ^App) -> FontError {
-	font_data, err := os.read_entire_file_from_path(app.font.path, context.temp_allocator)
+assets_pack_font_internal :: proc(renderer: ^Renderer) -> FontError {
+	font_data, err := os.read_entire_file_from_path(renderer.font.path, context.temp_allocator)
 	defer delete(font_data, context.temp_allocator)
 	if err != nil do return .File_Error
 
 	// clean exisiting font data
-	if app.font.texture != nil {
-		app.font.texture->release()
-		app.font.texture = nil
+	if renderer.font.texture != nil {
+		renderer.font.texture->release()
+		renderer.font.texture = nil
 	}
-	if app.font.sampler != nil {
-		app.font.sampler->release()
-		app.font.sampler = nil
+	if renderer.font.sampler != nil {
+		renderer.font.sampler->release()
+		renderer.font.sampler = nil
 	}
-	if app.font.bitmap != nil do delete(app.font.bitmap)
-	if app.font.char_data != nil {
-		for _, &char_data in app.font.char_data do delete(char_data)
-		delete(app.font.char_data)
+	if renderer.font.bitmap != nil do delete(renderer.font.bitmap)
+	if renderer.font.char_data != nil {
+		for _, &char_data in renderer.font.char_data do delete(char_data)
+		delete(renderer.font.char_data)
 	}
 
 	// create empty data
-	app.font.bitmap, err = make([]u8, app.font.bitmap_size * app.font.bitmap_size)
-	app.font.char_data = make(map[f32][]STBTT.packedchar)
-	for size in app.font.sizes {
-		app.font.char_data[size] = make([]STBTT.packedchar, CharAmount)
+	renderer.font.bitmap, err = make([]u8, renderer.font.bitmap_size * renderer.font.bitmap_size)
+	renderer.font.char_data = make(map[f32][]STBTT.packedchar)
+	for size in renderer.font.sizes {
+		renderer.font.char_data[size] = make([]STBTT.packedchar, CharAmount)
 	}
 
 	// pack font
 	pack_context := new(STBTT.pack_context, context.temp_allocator)
 	STBTT.PackBegin(
 		pack_context,
-		&app.font.bitmap[0],
-		app.font.bitmap_size,
-		app.font.bitmap_size,
+		&renderer.font.bitmap[0],
+		renderer.font.bitmap_size,
+		renderer.font.bitmap_size,
 		0,
 		1,
 		nil,
 	)
 	STBTT.PackSetOversampling(pack_context, 2, 2)
-	for size, i in app.font.sizes {
+	for size, i in renderer.font.sizes {
 		if ok := STBTT.PackFontRange(
 			pack_context,
 			&font_data[0],
@@ -104,7 +104,7 @@ assets_pack_font_internal :: proc(app: ^App) -> FontError {
 			size,
 			CharAtStart,
 			CharAmount,
-			&app.font.char_data[app.font.sizes[i]][0],
+			&renderer.font.char_data[renderer.font.sizes[i]][0],
 		); ok != 1 {
 			STBTT.PackEnd(pack_context)
 			return .Packing_Error
@@ -115,34 +115,38 @@ assets_pack_font_internal :: proc(app: ^App) -> FontError {
 	// bake to bitmap to metal texture
 	desc := MTL.TextureDescriptor.texture2DDescriptorWithPixelFormat(
 		.R8Unorm,
-		cast(NS.UInteger)app.font.bitmap_size,
-		cast(NS.UInteger)app.font.bitmap_size,
+		cast(NS.UInteger)renderer.font.bitmap_size,
+		cast(NS.UInteger)renderer.font.bitmap_size,
 		false,
 	)
 	desc->setStorageMode(.Shared)
-	app.font.texture = app.device->newTextureWithDescriptor(desc)
+	renderer.font.texture = renderer.device->newTextureWithDescriptor(desc)
 	region := MTL.Region {
 		origin = {0, 0, 0},
-		size   = {cast(NS.Integer)app.font.bitmap_size, cast(NS.Integer)app.font.bitmap_size, 1},
+		size   = {
+			cast(NS.Integer)renderer.font.bitmap_size,
+			cast(NS.Integer)renderer.font.bitmap_size,
+			1,
+		},
 	}
-	app.font.texture->replaceRegion(
+	renderer.font.texture->replaceRegion(
 		region,
 		0,
-		raw_data(app.font.bitmap),
-		cast(NS.UInteger)app.font.bitmap_size,
+		raw_data(renderer.font.bitmap),
+		cast(NS.UInteger)renderer.font.bitmap_size,
 	)
 	samp_desc := NS.new(MTL.SamplerDescriptor)
 	samp_desc->setMinFilter(.Nearest)
 	samp_desc->setMagFilter(.Nearest)
 	samp_desc->setSAddressMode(.ClampToZero)
 	samp_desc->setTAddressMode(.ClampToZero)
-	app.font.sampler = app.device->newSamplerState(samp_desc)
+	renderer.font.sampler = renderer.device->newSamplerState(samp_desc)
 
 	// DEBUG: save bitmap to .png
 	filename := strings.concatenate(
 		{
 			"debug/",
-			strings.split(filepath.base(app.font.path), ".", context.temp_allocator)[0],
+			strings.split(filepath.base(renderer.font.path), ".", context.temp_allocator)[0],
 			".png",
 		},
 		context.temp_allocator,
@@ -150,10 +154,10 @@ assets_pack_font_internal :: proc(app: ^App) -> FontError {
 
 	STBI.write_png(
 		strings.clone_to_cstring(filename, context.temp_allocator),
-		app.font.bitmap_size,
-		app.font.bitmap_size,
+		renderer.font.bitmap_size,
+		renderer.font.bitmap_size,
 		1,
-		raw_data(app.font.bitmap),
+		raw_data(renderer.font.bitmap),
 		pack_context.stride_in_bytes,
 	)
 
