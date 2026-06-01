@@ -1,7 +1,6 @@
 package ome
 
 import "core:log"
-import "core:os"
 import "core:time"
 
 import NS "core:sys/darwin/Foundation"
@@ -17,7 +16,6 @@ App :: struct {
 	pixel_height:    i32,
 	pixel_ratio:     f32,
 	window:          ^SDL.Window,
-	swapchain:       ^CA.MetalLayer,
 	compile_options: ^MTL.CompileOptions,
 	clear_color:     MTL.ClearColor,
 	//
@@ -32,7 +30,7 @@ App :: struct {
 	dt:              f32,
 	//
 	// Rendering
-	renderer:        Renderer,
+	renderer:        ^Renderer,
 	//
 	// UI
 	ui_context:      UIContext,
@@ -53,6 +51,8 @@ RenderCall :: struct {
 	start: int,
 	count: int,
 }
+
+KeyCallback :: proc(ctx: ^App)
 
 app_create :: proc(
 	title: cstring,
@@ -81,102 +81,8 @@ app_create :: proc(
 		return nil, false
 	}
 
-	native_window := (^NS.Window)(
-		SDL.GetPointerProperty(
-			SDL.GetWindowProperties(window),
-			SDL.PROP_WINDOW_COCOA_WINDOW_POINTER,
-			nil,
-		),
-	)
-	if native_window == nil {
-		log.errorf("Couldn't get native window")
-		return nil, false
-	}
-
-	device := MTL.CreateSystemDefaultDevice()
-	if device == nil {
-		log.errorf("Couldn't create default Metal device")
-		return nil, false
-	}
-
-	argument_buffer_support := device->argumentBuffersSupport()
-	if argument_buffer_support != .Tier2 {
-		log.errorf("Argument buffers aren't supported")
-		return nil, false
-	}
-
 	pixel_width, pixel_height: i32
 	SDL.GetWindowSizeInPixels(window, &pixel_width, &pixel_height)
-
-	swapchain := CA.MetalLayer.layer()
-	swapchain->setDrawableSize(NS.Size{cast(NS.Float)pixel_width, cast(NS.Float)pixel_height})
-	swapchain->setDevice(device)
-	swapchain->setPixelFormat(.BGRA8Unorm_sRGB)
-	swapchain->setFramebufferOnly(true)
-	swapchain->setFrame(native_window->frame())
-
-	native_window->contentView()->setLayer(swapchain)
-	native_window->setOpaque(true)
-	native_window->setBackgroundColor(nil)
-
-	command_q := device->newCommandQueue()
-	compile_options := NS.new(MTL.CompileOptions)
-
-	shader_file, shader_file_load_error := os.read_entire_file_from_path(
-		"assets/shaders/shader.metal",
-		context.temp_allocator,
-	)
-
-	defer delete(shader_file, context.temp_allocator)
-	if shader_file_load_error != nil {
-		log.errorf(
-			"Couldn't load shader files. Error: %v",
-			os.error_string(shader_file_load_error),
-		)
-		return nil, false
-	}
-
-	program_library, lib_error := device->newLibraryWithSource(
-		NS.String.alloc()->initWithOdinString(string(shader_file)),
-		compile_options,
-	)
-	if lib_error != nil {
-		log.errorf("Shader compilation failed. Error: %v", lib_error->localizedDescription())
-		return nil, false
-	}
-
-	vertex_program := program_library->newFunctionWithName(NS.AT("vertex_main"))
-	fragment_program := program_library->newFunctionWithName(NS.AT("fragment_main"))
-
-	if vertex_program == nil {
-		log.errorf("Shader vertex function extraction failed.")
-		return nil, false
-	}
-
-	if fragment_program == nil {
-		log.errorf("Shader fragment function extraction failed.")
-		return nil, false
-	}
-
-	pipeline_state_descriptor := NS.new(MTL.RenderPipelineDescriptor)
-	pipeline_state_descriptor->colorAttachments()->object(0)->setPixelFormat(.BGRA8Unorm_sRGB)
-	pipeline_state_descriptor->setVertexFunction(vertex_program)
-	pipeline_state_descriptor->setFragmentFunction(fragment_program)
-	color_attachments := pipeline_state_descriptor->colorAttachments()->object(0)
-
-	color_attachments->setBlendingEnabled(true)
-	color_attachments->setRgbBlendOperation(.Add)
-	color_attachments->setAlphaBlendOperation(.Add)
-	color_attachments->setSourceRGBBlendFactor(.SourceAlpha)
-	color_attachments->setSourceAlphaBlendFactor(.SourceAlpha)
-	color_attachments->setDestinationRGBBlendFactor(.OneMinusSourceAlpha)
-	color_attachments->setDestinationAlphaBlendFactor(.OneMinusSourceAlpha)
-
-	pipeline_state, pipeline_error := device->newRenderPipelineState(pipeline_state_descriptor)
-	if pipeline_error != nil {
-		log.errorf("Pipeline creation failed. Error: %v", pipeline_error->localizedDescription())
-		return nil, false
-	}
 
 	app := new(App)
 	app.window = window
@@ -185,27 +91,23 @@ app_create :: proc(
 	app.pixel_width = pixel_width
 	app.pixel_height = pixel_height
 	app.pixel_ratio = f32(app.pixel_width) / f32(app.logical_width)
-	app.swapchain = swapchain
-	app.compile_options = compile_options
 
-	app.renderer.device = device
-	app.renderer.command_q = command_q
-	app.renderer.pipeline_state = pipeline_state
-	app.renderer.render_calls = make([dynamic]RenderCall)
-	app.renderer.texture_manager = texture_manager_create()
-	app.renderer.logical_size = {app.logical_width, app.logical_height}
-	app.renderer.vertices = gpu_buffer_create(Vertex, app.renderer.device)
-	app.renderer.colors = gpu_buffer_create(Color, app.renderer.device)
-	app.renderer.uvs = gpu_buffer_create(Uv, app.renderer.device)
-	app.renderer.modes = gpu_buffer_create(Mode, app.renderer.device)
-	app.renderer.tex_ids = gpu_buffer_create(TexID, app.renderer.device)
+	if renderer, ok := renderer_create(
+		app.window,
+		app.logical_width,
+		app.logical_height,
+		app.pixel_width,
+		app.pixel_height,
+	); !ok {
+		return nil, false
+	} else {
+		app.renderer = renderer
+	}
 
 	app.clear_color = MTL.ClearColor{clear_color.r, clear_color.g, clear_color.b, clear_color.a}
 	app.key_callbacks = make(map[u64]KeyCallback)
 	app.quit = false
 	app.start_time = time.now()
-
-	texture_manager_init(app, app.renderer.texture_manager, fragment_program)
 
 	SDL.ShowWindow(window)
 
@@ -223,7 +125,6 @@ app_init_ui :: proc(app: ^App) {
 	)
 }
 
-KeyCallback :: proc(app: ^App)
 app_process_events :: proc(app: ^App) {
 	app.frame_start = time.now()
 
@@ -236,7 +137,7 @@ app_process_events :: proc(app: ^App) {
 			SDL.GetWindowSize(app.window, &app.logical_width, &app.logical_height)
 			app.renderer.logical_size = {app.logical_width, app.logical_height}
 			app.pixel_ratio = f32(app.pixel_width) / f32(app.logical_width)
-			app.swapchain->setDrawableSize(
+			app.renderer.swapchain->setDrawableSize(
 				NS.Size{cast(NS.Float)app.pixel_width, cast(NS.Float)app.pixel_height},
 			)
 		case .KEY_DOWN:
@@ -254,7 +155,7 @@ app_process_events :: proc(app: ^App) {
 app_pre_render :: proc(app: ^App) {
 	app.frame_context.pool = NS.AutoreleasePool.alloc()->init()
 
-	app.frame_context.drawable = app.swapchain->nextDrawable()
+	app.frame_context.drawable = app.renderer.swapchain->nextDrawable()
 	assert(app.frame_context.drawable != nil)
 
 	pass := MTL.RenderPassDescriptor.renderPassDescriptor()

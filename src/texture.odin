@@ -24,8 +24,8 @@ texture_manager_create :: proc() -> ^TextureManager {
 }
 
 texture_manager_init :: proc(
-	app: ^App,
 	texture_manager: ^TextureManager,
+	renderer: ^Renderer,
 	fragment_fn: ^MTL.Function,
 ) {
 	samp_desc := NS.new(MTL.SamplerDescriptor)
@@ -33,9 +33,9 @@ texture_manager_init :: proc(
 	samp_desc->setMagFilter(.Linear)
 	samp_desc->setSupportArgumentBuffers(true)
 
-	texture_manager.sampler = app.renderer.device->newSamplerState(samp_desc)
+	texture_manager.sampler = renderer.device->newSamplerState(samp_desc)
 	texture_manager.encoder = fragment_fn->newArgumentEncoder(0)
-	texture_manager.arguments = app.renderer.device->newBufferWithLength(
+	texture_manager.arguments = renderer.device->newBufferWithLength(
 		texture_manager.encoder->encodedLength(),
 		MTL.ResourceStorageModeShared,
 	)
