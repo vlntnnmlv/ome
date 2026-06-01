@@ -25,19 +25,26 @@ Font :: struct {
 	path:        string,
 	bitmap_size: i32,
 	bitmap:      []u8,
-	sizes:       [dynamic]f32,
-	char_data:   map[f32][]STBTT.packedchar,
+	sizes:       [dynamic]u32,
+	char_data:   map[u32][]STBTT.packedchar,
 	texture:     ^MTL.Texture,
 	sampler:     ^MTL.SamplerState,
 }
 
-assets_load_font :: proc(renderer: ^Renderer, path: string, sizes: []f32) {
+REFERENCE_FONT_SIZE :: 32
+
+assets_load_font :: proc(renderer: ^Renderer, path: string, sizes: []u32 = {}) {
 	renderer.font.path = path
 	renderer.font.bitmap_size = INITIAL_BITMAP_SIZE
 
-	renderer.font.sizes = make([dynamic]f32)
+	renderer.font.sizes = make([dynamic]u32)
 
 	for size in sizes do append(&renderer.font.sizes, size)
+
+	if len(renderer.font.sizes) == 0 ||
+	   !slice.contains(renderer.font.sizes[:], REFERENCE_FONT_SIZE) {
+		append(&renderer.font.sizes, REFERENCE_FONT_SIZE)
+	}
 
 	assets_pack_font(renderer)
 }
@@ -50,7 +57,7 @@ assets_pack_font :: proc(renderer: ^Renderer) {
 	}
 }
 
-assets_validate_font_size :: proc(renderer: ^Renderer, size: f32) {
+assets_validate_font_size :: proc(renderer: ^Renderer, size: u32) {
 	if !slice.contains(renderer.font.sizes[:], size) {
 		append(&renderer.font.sizes, size)
 		assets_pack_font(renderer)
@@ -79,7 +86,7 @@ assets_pack_font_internal :: proc(renderer: ^Renderer) -> FontError {
 
 	// create empty data
 	renderer.font.bitmap, err = make([]u8, renderer.font.bitmap_size * renderer.font.bitmap_size)
-	renderer.font.char_data = make(map[f32][]STBTT.packedchar)
+	renderer.font.char_data = make(map[u32][]STBTT.packedchar)
 	for size in renderer.font.sizes {
 		renderer.font.char_data[size] = make([]STBTT.packedchar, CharAmount)
 	}
@@ -101,7 +108,7 @@ assets_pack_font_internal :: proc(renderer: ^Renderer) -> FontError {
 			pack_context,
 			&font_data[0],
 			0,
-			size,
+			cast(f32)size,
 			CharAtStart,
 			CharAmount,
 			&renderer.font.char_data[renderer.font.sizes[i]][0],

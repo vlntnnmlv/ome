@@ -10,11 +10,6 @@ import CA "vendor:darwin/QuartzCore"
 
 import SDL "vendor:sdl3"
 
-Vertex :: distinct [4]f32
-Uv :: distinct [2]f32
-Mode :: distinct u32
-TexID :: distinct u32
-
 App :: struct {
 	logical_height:  i32,
 	logical_width:   i32,

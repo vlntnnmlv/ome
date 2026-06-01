@@ -5,6 +5,15 @@ import "core:slice"
 import MTL "vendor:darwin/Metal"
 import STBTT "vendor:stb/truetype"
 
+Vertex :: distinct [4]f32
+Uv :: distinct [2]f32
+Mode :: enum u32 {
+	PRIMITIVE = 0,
+	TEXT      = 1,
+	TEXTURE   = 2,
+}
+TexID :: distinct u32
+
 graphics_append_render_call :: proc(
 	renderer: ^Renderer,
 	type: MTL.PrimitiveType,
@@ -67,7 +76,7 @@ graphics_add_quad :: proc(renderer: ^Renderer, rect: Rect, color: Maybe(Color) =
 graphics_add_text :: proc(
 	renderer: ^Renderer,
 	text: string,
-	font_size: f32,
+	font_size: u32,
 	rect: Rect,
 	color: Maybe(Color) = nil,
 ) {
@@ -77,9 +86,8 @@ graphics_add_text :: proc(
 	x := rect.x
 	y := rect.y
 
-	for char in text {
-		if char < CharAtStart || char > CharAtStart + CharAmount do continue
-
+	it := StringPrintableIterator{text, 0}
+	for char in iterate_printable(&it) {
 		quad: STBTT.aligned_quad
 		STBTT.GetPackedQuad(
 			&renderer.font.char_data[real_font_size][0],
@@ -105,7 +113,7 @@ graphics_add_text :: proc(
 			{quad.s1, quad.t0},
 		}
 		colors := get_n_colors(color, VERTICES_PER_QUAD)
-		modes: [VERTICES_PER_QUAD]Mode = 1
+		modes: [VERTICES_PER_QUAD]Mode = Mode.TEXT
 		tex_ids := [VERTICES_PER_QUAD]TexID{}
 
 		gpu_buffer_append(&renderer.vertices, vertices[:])
@@ -146,7 +154,7 @@ graphics_add_texture :: proc(
 	colors := get_n_colors(color, vertices_count)
 
 	modes := make([dynamic]Mode, vertices_count, context.temp_allocator)
-	slice.fill(modes[:], 2)
+	slice.fill(modes[:], Mode.TEXTURE)
 
 	tex_ids := make([dynamic]TexID, vertices_count, context.temp_allocator)
 	slice.fill(tex_ids[:], TexID(texture_handle))

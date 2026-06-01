@@ -37,7 +37,7 @@ render_rect :: proc(renderer: ^Renderer, rect: Rect, color: Maybe(Color) = nil) 
 render_text :: proc(
 	renderer: ^Renderer,
 	text: string,
-	font_size: f32,
+	font_size: u32,
 	rect: Rect,
 	color: Maybe(Color) = nil,
 ) {
