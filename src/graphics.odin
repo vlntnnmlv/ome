@@ -1,7 +1,5 @@
 package ome
 
-import "core:slice"
-
 import MTL "vendor:darwin/Metal"
 import STBTT "vendor:stb/truetype"
 
@@ -31,44 +29,34 @@ graphics_append_render_call :: proc(
 graphics_add_points :: proc(
 	renderer: ^Renderer,
 	points: [][2]f32,
-	color: Maybe(Color) = nil,
+	color: Color,
 	fill: bool = false,
 ) {
 	start := len(renderer.vertices.cpu)
-	vertices_count := len(points)
-
 	vertices := points_to_vertices(renderer.logical_size, points)
-	colors := get_n_colors(color, vertices_count)
-	uvs := make([]Uv, vertices_count, context.temp_allocator)
-	modes := make([]Mode, vertices_count, context.temp_allocator)
-	tex_ids := make([]TexID, vertices_count, context.temp_allocator)
 
+	vertices_count := len(points)
 	gpu_buffer_append(&renderer.vertices, vertices[:])
-	gpu_buffer_append(&renderer.colors, colors[:])
-	gpu_buffer_append(&renderer.uvs, uvs[:])
-	gpu_buffer_append(&renderer.modes, modes[:])
-	gpu_buffer_append(&renderer.tex_ids, tex_ids[:])
+	gpu_buffer_fill_zeros_n(&renderer.uvs, vertices_count)
+	gpu_buffer_fill_n(&renderer.colors, color, vertices_count)
+	gpu_buffer_fill_zeros_n(&renderer.modes, vertices_count)
+	gpu_buffer_fill_zeros_n(&renderer.tex_ids, vertices_count)
 
 	type: MTL.PrimitiveType = .LineStrip
 	if fill do type = .Triangle
 	graphics_append_render_call(renderer, type, start, vertices_count)
 }
 
-graphics_add_quad :: proc(renderer: ^Renderer, rect: Rect, color: Maybe(Color) = nil) {
+graphics_add_quad :: proc(renderer: ^Renderer, rect: Rect, color: Color) {
 	start := len(renderer.vertices.cpu)
 	vertices := rect_to_vertices(renderer.logical_size, rect)
+
 	vertices_count := len(vertices)
-
-	colors := get_n_colors(color, vertices_count)
-	uvs := make([dynamic]Uv, vertices_count, context.temp_allocator)
-	modes := make([dynamic]Mode, vertices_count, context.temp_allocator)
-	tex_ids := make([dynamic]TexID, vertices_count, context.temp_allocator)
-
 	gpu_buffer_append(&renderer.vertices, vertices[:])
-	gpu_buffer_append(&renderer.colors, colors[:])
-	gpu_buffer_append(&renderer.uvs, uvs[:])
-	gpu_buffer_append(&renderer.modes, modes[:])
-	gpu_buffer_append(&renderer.tex_ids, tex_ids[:])
+	gpu_buffer_fill_zeros_n(&renderer.uvs, vertices_count)
+	gpu_buffer_fill_n(&renderer.colors, color, vertices_count)
+	gpu_buffer_fill_zeros_n(&renderer.modes, vertices_count)
+	gpu_buffer_fill_zeros_n(&renderer.tex_ids, vertices_count)
 
 	graphics_append_render_call(renderer, .Triangle, start, vertices_count)
 }
@@ -78,7 +66,7 @@ graphics_add_text :: proc(
 	text: string,
 	font_size: u32,
 	rect: Rect,
-	color: Maybe(Color) = nil,
+	color: Color,
 ) {
 	real_font_size := text_fit(renderer, text, font_size, rect)
 	assets_validate_font_size(renderer, real_font_size)
@@ -86,6 +74,11 @@ graphics_add_text :: proc(
 	x := rect.x
 	y := rect.y
 
+	cap := len(text) * VERTICES_PER_QUAD
+	total_vertices := make([dynamic]Vertex, 0, cap, context.temp_allocator)
+	total_uvs := make([dynamic]Uv, 0, cap, context.temp_allocator)
+
+	start := len(renderer.vertices.cpu)
 	it := StringPrintableIterator{text, 0}
 	for char in iterate_printable(&it) {
 		quad: STBTT.aligned_quad
@@ -100,7 +93,6 @@ graphics_add_text :: proc(
 			true,
 		)
 
-		start := len(renderer.vertices.cpu)
 		char_rect := Rect{quad.x0, quad.y0, quad.x1 - quad.x0, quad.y1 - quad.y0}
 		vertices := rect_to_vertices(renderer.logical_size, char_rect)
 
@@ -112,25 +104,26 @@ graphics_add_text :: proc(
 			{quad.s1, quad.t1},
 			{quad.s1, quad.t0},
 		}
-		colors := get_n_colors(color, VERTICES_PER_QUAD)
-		modes: [VERTICES_PER_QUAD]Mode = Mode.TEXT
-		tex_ids := [VERTICES_PER_QUAD]TexID{}
 
-		gpu_buffer_append(&renderer.vertices, vertices[:])
-		gpu_buffer_append(&renderer.colors, colors[:])
-		gpu_buffer_append(&renderer.uvs, uvs[:])
-		gpu_buffer_append(&renderer.modes, modes[:])
-		gpu_buffer_append(&renderer.tex_ids, tex_ids[:])
-
-		graphics_append_render_call(renderer, .Triangle, start, VERTICES_PER_QUAD)
+		append(&total_vertices, ..vertices[:])
+		append(&total_uvs, ..uvs[:])
 	}
+
+	total_vertices_length := len(total_vertices)
+	gpu_buffer_append(&renderer.vertices, total_vertices[:])
+	gpu_buffer_append(&renderer.uvs, total_uvs[:])
+	gpu_buffer_fill_n(&renderer.colors, color, total_vertices_length)
+	gpu_buffer_fill_n(&renderer.modes, Mode.TEXT, total_vertices_length)
+	gpu_buffer_fill_n(&renderer.tex_ids, TexID{}, total_vertices_length)
+
+	graphics_append_render_call(renderer, .Triangle, start, total_vertices_length)
 }
 
 graphics_add_texture :: proc(
 	renderer: ^Renderer,
 	texture_handle: TextureHandle,
 	rect: Rect,
-	color: Maybe(Color) = nil,
+	color: Color,
 	slice_offset: Maybe(RectOffset) = nil,
 ) {
 	start := len(renderer.vertices.cpu)
@@ -150,20 +143,11 @@ graphics_add_texture :: proc(
 	}
 
 	vertices_count := len(positions)
-
-	colors := get_n_colors(color, vertices_count)
-
-	modes := make([dynamic]Mode, vertices_count, context.temp_allocator)
-	slice.fill(modes[:], Mode.TEXTURE)
-
-	tex_ids := make([dynamic]TexID, vertices_count, context.temp_allocator)
-	slice.fill(tex_ids[:], TexID(texture_handle))
-
 	gpu_buffer_append(&renderer.vertices, positions[:])
-	gpu_buffer_append(&renderer.colors, colors[:])
 	gpu_buffer_append(&renderer.uvs, uvs[:])
-	gpu_buffer_append(&renderer.modes, modes[:])
-	gpu_buffer_append(&renderer.tex_ids, tex_ids[:])
+	gpu_buffer_fill_n(&renderer.colors, color, vertices_count)
+	gpu_buffer_fill_n(&renderer.modes, Mode.TEXTURE, vertices_count)
+	gpu_buffer_fill_n(&renderer.tex_ids, TexID(texture_handle), vertices_count)
 
 	graphics_append_render_call(renderer, .Triangle, start, vertices_count)
 }

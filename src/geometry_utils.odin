@@ -1,40 +1,10 @@
 package ome
 
-// TODO: Get rid of
-get_n_colors_rainbow :: proc(count: int) -> [dynamic]Color {
-	colors := make([dynamic]Color, context.temp_allocator)
-	for i in 0 ..< count {
-		append(
-			&colors,
-			cast(Color)[4]int{int(i % 3 == 0), int((i + 2) % 3 == 0), int((i + 1) % 3 == 0), 1},
-		)
-	}
-
-	return colors
-}
-
-get_n_colors_dupe :: proc(color: Color, count: int) -> [dynamic]Color {
-	colors: [dynamic]Color = make([dynamic]Color, context.temp_allocator)
-	for _ in 0 ..< count {
-		append(&colors, color)
-	}
-
-	return colors
-}
-
-get_n_colors :: proc(color: Maybe(Color), count: int) -> [dynamic]Color {
-	if real_color, ok := color.?; !ok {
-		return get_n_colors_rainbow(count)
-	} else {
-		return get_n_colors_dupe(real_color, count)
-	}
-}
-
 VERTICES_PER_QUAD :: 6
 VERTICES_PER_NINE_SLICED_QUAD :: 9 * VERTICES_PER_QUAD
 UNIT_RECT :: Rect{0, 0, 1, 1}
 
-screen_to_world :: proc(logical_size: [2]i32, x: f32, y: f32) -> [2]f32 {
+screen_to_world :: proc(logical_size: [2]int, x: f32, y: f32) -> [2]f32 {
 	return {2 * x / cast(f32)logical_size.x - 1, 1 - 2 * y / cast(f32)logical_size.y}
 }
 
@@ -57,7 +27,7 @@ rect_split_to_grid :: proc(rect: Rect, offset: RectOffset) -> [9]Rect {
 }
 
 rect_to_vertices_nine_slice :: proc(
-	logical_size: [2]i32,
+	logical_size: [2]int,
 	rect: Rect,
 	offset: RectOffset,
 ) -> [dynamic]Vertex {
@@ -85,7 +55,7 @@ offset_to_uvs_nine_slice :: proc(offset: RectOffset, tw, th: f32) -> [dynamic]Uv
 	return uvs
 }
 
-rect_to_vertices :: proc(logical_size: [2]i32, rect: Rect) -> [dynamic]Vertex {
+rect_to_vertices :: proc(logical_size: [2]int, rect: Rect) -> [dynamic]Vertex {
 	vertices := make([dynamic]Vertex, VERTICES_PER_QUAD, context.temp_allocator)
 	tl := point_to_vertex(logical_size, rect.x, rect.y)
 	bl := point_to_vertex(logical_size, rect.x, rect.y + rect.h)
@@ -125,17 +95,17 @@ point_to_vertex :: proc {
 	point_to_vertex_array,
 }
 
-point_to_vertex_xy :: proc(logical_size: [2]i32, x: f32, y: f32) -> Vertex {
+point_to_vertex_xy :: proc(logical_size: [2]int, x: f32, y: f32) -> Vertex {
 	tmp := screen_to_world(logical_size, x, y)
 	return {tmp.x, tmp.y, 0, 1}
 }
 
-point_to_vertex_array :: proc(logical_size: [2]i32, point: [2]f32) -> Vertex {
+point_to_vertex_array :: proc(logical_size: [2]int, point: [2]f32) -> Vertex {
 	tmp := screen_to_world(logical_size, point.x, point.y)
 	return {tmp.x, tmp.y, 0, 1}
 }
 
-points_to_vertices :: proc(logical_size: [2]i32, points: [][2]f32) -> [dynamic]Vertex {
+points_to_vertices :: proc(logical_size: [2]int, points: [][2]f32) -> [dynamic]Vertex {
 	vertices := make([dynamic]Vertex, context.temp_allocator)
 
 	for point in points {

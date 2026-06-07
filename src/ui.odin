@@ -15,6 +15,7 @@ RectOffset :: struct {
 Color :: distinct [4]f32
 INVALID_COLOR :: Color{-1, -1, -1, -1}
 TRANSPARENT_COLOR :: Color{0, 0, 0, 0}
+BLACK_COLOR :: Color{0, 0, 0, 1}
 
 UIPanelHandle :: distinct u32
 

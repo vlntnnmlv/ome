@@ -2,6 +2,7 @@ package ome
 
 import "core:log"
 import "core:os"
+import "core:sync"
 
 import NS "core:sys/darwin/Foundation"
 import MTL "vendor:darwin/Metal"
@@ -9,25 +10,47 @@ import CA "vendor:darwin/QuartzCore"
 
 import SDL "vendor:sdl3"
 
+FrameContext :: struct {
+	pool:           ^NS.AutoreleasePool,
+	drawable:       ^CA.MetalDrawable,
+	command_buffer: ^MTL.CommandBuffer,
+	encoder:        ^MTL.RenderCommandEncoder,
+}
+
+RenderCall :: struct {
+	type:  MTL.PrimitiveType,
+	start: int,
+	count: int,
+}
+
 Renderer :: struct {
-	device:          ^MTL.Device,
-	command_q:       ^MTL.CommandQueue,
-	pipeline_state:  ^MTL.RenderPipelineState,
-	swapchain:       ^CA.MetalLayer,
-	render_calls:    [dynamic]RenderCall,
-	texture_manager: ^TextureManager,
-	font:            Font,
-	logical_size:    [2]i32,
-	vertices:        GPUBuffer(Vertex),
-	colors:          GPUBuffer(Color),
-	uvs:             GPUBuffer(Uv),
-	tex_ids:         GPUBuffer(TexID),
-	modes:           GPUBuffer(Mode),
+	device:               ^MTL.Device,
+	command_q:            ^MTL.CommandQueue,
+	compile_options:      ^MTL.CompileOptions,
+	pipeline_state:       ^MTL.RenderPipelineState,
+	swapchain:            ^CA.MetalLayer,
+	render_calls:         [dynamic]RenderCall,
+	clear_color:          MTL.ClearColor,
+	texture_manager:      ^TextureManager,
+	font:                 Font,
+	logical_size:         [2]int,
+	vertices:             GPUBuffer(Vertex),
+	colors:               GPUBuffer(Color),
+	uvs:                  GPUBuffer(Uv),
+	tex_ids:              GPUBuffer(TexID),
+	modes:                GPUBuffer(Mode),
+	frame_context:        FrameContext,
+	//
+	// Internal
+	frame_slot_index:     int,
+	frame_sema:           sync.Sema,
+	frame_complete_block: ^NS.Block,
 }
 
 renderer_create :: proc(
 	window: ^SDL.Window,
-	logical_width, logical_height, pixel_width, pixel_height: i32,
+	logical_width, logical_height, pixel_width, pixel_height: int,
+	clear_color: [4]f64,
 ) -> (
 	^Renderer,
 	bool,
@@ -142,14 +165,136 @@ renderer_create :: proc(
 	renderer.modes = gpu_buffer_create(Mode, renderer.device)
 	renderer.tex_ids = gpu_buffer_create(TexID, renderer.device)
 
+	renderer.clear_color = MTL.ClearColor {
+		clear_color.r,
+		clear_color.g,
+		clear_color.b,
+		clear_color.a,
+	}
+
 	texture_manager_init(renderer.texture_manager, renderer, fragment_program)
 
+	sync.sema_post(&renderer.frame_sema, GPU_BUFFERS_RING_SIZE)
+	renderer.frame_complete_block, _ = NS.Block.createGlobal(
+		&renderer.frame_sema,
+		renderer_on_frame_complete,
+	)
 
 	return renderer, true
 }
 
+renderer_begin :: proc(renderer: ^Renderer) {
+	renderer_wait_on_frame_complete(renderer)
+
+	renderer.frame_context.pool = NS.AutoreleasePool.alloc()->init()
+
+	renderer.frame_context.drawable = renderer.swapchain->nextDrawable()
+	assert(renderer.frame_context.drawable != nil)
+
+	pass := MTL.RenderPassDescriptor.renderPassDescriptor()
+	color_attachment := pass->colorAttachments()->object(0)
+	assert(color_attachment != nil)
+	color_attachment->setClearColor(renderer.clear_color)
+	color_attachment->setLoadAction(.Clear)
+	color_attachment->setStoreAction(.Store)
+	color_attachment->setTexture(renderer.frame_context.drawable->texture())
+
+	renderer.frame_context.command_buffer = renderer.command_q->commandBuffer()
+	renderer.frame_context.encoder = renderer.frame_context.command_buffer->renderCommandEncoderWithDescriptor(
+		pass,
+	)
+
+	gpu_buffer_clear(&renderer.vertices)
+	gpu_buffer_clear(&renderer.colors)
+	gpu_buffer_clear(&renderer.uvs)
+	gpu_buffer_clear(&renderer.modes)
+	gpu_buffer_clear(&renderer.tex_ids)
+
+	clear(&renderer.render_calls)
+}
+
+renderer_flush :: proc(renderer: ^Renderer) {
+	gpu_buffer_submit(&renderer.vertices, renderer.frame_slot_index)
+	gpu_buffer_submit(&renderer.colors, renderer.frame_slot_index)
+	gpu_buffer_submit(&renderer.uvs, renderer.frame_slot_index)
+	gpu_buffer_submit(&renderer.modes, renderer.frame_slot_index)
+	gpu_buffer_submit(&renderer.tex_ids, renderer.frame_slot_index)
+
+	renderer.frame_context.encoder->setRenderPipelineState(renderer.pipeline_state)
+	renderer.frame_context.encoder->setVertexBuffer(
+		renderer.vertices.gpu_ring[renderer.frame_slot_index],
+		0,
+		0,
+	)
+	renderer.frame_context.encoder->setVertexBuffer(
+		renderer.colors.gpu_ring[renderer.frame_slot_index],
+		0,
+		1,
+	)
+	renderer.frame_context.encoder->setVertexBuffer(
+		renderer.uvs.gpu_ring[renderer.frame_slot_index],
+		0,
+		2,
+	)
+	renderer.frame_context.encoder->setVertexBuffer(
+		renderer.modes.gpu_ring[renderer.frame_slot_index],
+		0,
+		3,
+	)
+	renderer.frame_context.encoder->setVertexBuffer(
+		renderer.tex_ids.gpu_ring[renderer.frame_slot_index],
+		0,
+		4,
+	)
+
+	if renderer.font.texture != nil {
+		renderer.frame_context.encoder->setFragmentTexture(renderer.font.texture, 0)
+		renderer.frame_context.encoder->setFragmentSamplerState(renderer.font.sampler, 0)
+	}
+
+	renderer.frame_context.encoder->setFragmentBuffer(renderer.texture_manager.arguments, 0, 0)
+	if len(renderer.texture_manager.textures) > 0 {
+		renderer.frame_context.encoder->useResourcesStages(
+			transmute([]^MTL.Resource)renderer.texture_manager.textures[:],
+			{.Read},
+			{.Fragment},
+		)
+	}
+
+	for render_call in renderer.render_calls {
+		renderer.frame_context.encoder->drawPrimitivesWithInstanceCount(
+			render_call.type,
+			cast(NS.UInteger)render_call.start,
+			cast(NS.UInteger)render_call.count,
+			1,
+		)
+	}
+}
+
+renderer_present :: proc(renderer: ^Renderer) {
+	renderer.frame_context.command_buffer->addCompletedHandler(
+		MTL.CommandBufferHandler(renderer.frame_complete_block),
+	)
+
+	renderer.frame_context.encoder->endEncoding()
+
+	renderer.frame_context.command_buffer->presentDrawable(renderer.frame_context.drawable)
+	renderer.frame_context.command_buffer->commit()
+
+	renderer.frame_context.pool->drain()
+	renderer.frame_context.pool = nil
+}
+
+@(private = "file")
+resolve_color :: proc(color: Maybe(Color)) -> Color {
+	if real_color, ok := color.?; ok {
+		return real_color
+	}
+	return BLACK_COLOR
+}
+
 render_line :: proc(renderer: ^Renderer, start: [2]f32, end: [2]f32, color: Maybe(Color) = nil) {
-	graphics_add_points(renderer, {start, end}, color)
+	graphics_add_points(renderer, {start, end}, resolve_color(color))
 }
 
 render_segments :: proc(
@@ -158,11 +303,11 @@ render_segments :: proc(
 	color: Maybe(Color) = nil,
 	fill: bool = false,
 ) {
-	graphics_add_points(renderer, points, color, fill)
+	graphics_add_points(renderer, points, resolve_color(color), fill)
 }
 
 render_rect :: proc(renderer: ^Renderer, rect: Rect, color: Maybe(Color) = nil) {
-	graphics_add_quad(renderer, rect, color)
+	graphics_add_quad(renderer, rect, resolve_color(color))
 }
 
 render_text :: proc(
@@ -172,7 +317,7 @@ render_text :: proc(
 	rect: Rect,
 	color: Maybe(Color) = nil,
 ) {
-	graphics_add_text(renderer, text, font_size, rect, color)
+	graphics_add_text(renderer, text, font_size, rect, resolve_color(color))
 }
 
 render_texture :: proc(
@@ -182,5 +327,48 @@ render_texture :: proc(
 	color: Maybe(Color) = nil,
 	slice_offset: Maybe(RectOffset) = nil,
 ) {
-	graphics_add_texture(renderer, handle, rect, color, slice_offset)
+	graphics_add_texture(renderer, handle, rect, resolve_color(color), slice_offset)
+}
+
+renderer_resize :: proc(
+	renderer: ^Renderer,
+	logical_width, logical_height, pixel_width, pixel_height: int,
+) {
+	renderer.logical_size = {logical_width, logical_height}
+	renderer.swapchain->setDrawableSize(
+		NS.Size{cast(NS.Float)pixel_width, cast(NS.Float)pixel_height},
+	)
+}
+
+renderer_delete :: proc(renderer: ^Renderer) {
+	for _ in 0 ..< GPU_BUFFERS_RING_SIZE {
+		sync.sema_wait(&renderer.frame_sema)
+	}
+
+	assets_delete_font(&renderer.font)
+
+	texture_manager_delete(renderer.texture_manager)
+	free(renderer.texture_manager)
+
+	delete(renderer.render_calls)
+	gpu_buffer_delete(&renderer.vertices)
+	gpu_buffer_delete(&renderer.uvs)
+	gpu_buffer_delete(&renderer.colors)
+	gpu_buffer_delete(&renderer.modes)
+	gpu_buffer_delete(&renderer.tex_ids)
+
+	free(renderer.frame_complete_block)
+
+	renderer.device->release()
+}
+
+@(private)
+renderer_wait_on_frame_complete :: proc(renderer: ^Renderer) {
+	sync.sema_wait(&renderer.frame_sema)
+	renderer.frame_slot_index = (renderer.frame_slot_index + 1) % GPU_BUFFERS_RING_SIZE
+}
+
+@(private = "file")
+renderer_on_frame_complete :: proc "c" (user_data: rawptr) {
+	sync.sema_post((^sync.Sema)(user_data))
 }

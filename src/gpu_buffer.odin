@@ -1,64 +1,76 @@
 package ome
 
 import "core:mem"
+import "core:slice"
+
 import NS "core:sys/darwin/Foundation"
 import MTL "vendor:darwin/Metal"
 
 INITIAL_BUFFER_SIZE :: 1024
+GPU_BUFFERS_RING_SIZE :: 3
 
 GPUBuffer :: struct($T: typeid) {
-	cpu:    [dynamic]T,
-	gpu:    ^MTL.Buffer,
-	device: ^MTL.Device,
-	cap:    int,
+	cpu:      [dynamic]T,
+	gpu_ring: [GPU_BUFFERS_RING_SIZE]^MTL.Buffer,
+	caps:     [GPU_BUFFERS_RING_SIZE]int,
+	device:   ^MTL.Device,
 }
 
 gpu_buffer_create :: proc($T: typeid, device: ^MTL.Device) -> GPUBuffer(T) {
 	buffer: GPUBuffer(T)
 	buffer.device = device
 	buffer.cpu = make([dynamic]T, 0, INITIAL_BUFFER_SIZE, context.allocator)
-	buffer.gpu = buffer.device->newBufferWithLength(INITIAL_BUFFER_SIZE * size_of(T), {})
-	buffer.cap = INITIAL_BUFFER_SIZE
+
+	buffer.caps = INITIAL_BUFFER_SIZE
+	for slot in 0 ..< GPU_BUFFERS_RING_SIZE {
+		buffer.gpu_ring[slot] = buffer.device->newBufferWithLength(
+			cast(NS.UInteger)buffer.caps[slot] * size_of(T),
+			{},
+		)
+	}
 
 	return buffer
 }
 
 gpu_buffer_append :: proc(buffer: ^GPUBuffer($T), data: []T) {
-	needed := len(buffer.cpu) + len(data)
-	for needed > buffer.cap {
-		for buffer.cap < needed do buffer.cap *= 2
-
-		// cpu
-		reserve(&buffer.cpu, buffer.cap)
-
-		// gpu
-		old_gpu := buffer.gpu
-		buffer.gpu = buffer.device->newBufferWithLength(
-			cast(NS.UInteger)buffer.cap * size_of(T),
-			{},
-		)
-		// mem.copy(
-		// 	raw_data(buffer.gpu->contents()),
-		// 	raw_data(old_gpu->contents()),
-		// 	len(buffer.cpu) * size_of(T),
-		// )
-
-		old_gpu->release()
-	}
-
 	append(&buffer.cpu, ..data)
+}
+
+gpu_buffer_fill_zeros_n :: proc(buffer: ^GPUBuffer($T), n: int) {
+	old := len(buffer.cpu)
+	resize(&buffer.cpu, old + n)
+	slice.fill(buffer.cpu[old:], T{})
+}
+
+gpu_buffer_fill_n :: proc(buffer: ^GPUBuffer($T), value: T, n: int) {
+	old := len(buffer.cpu)
+	resize(&buffer.cpu, old + n)
+	slice.fill(buffer.cpu[old:], value)
 }
 
 gpu_buffer_clear :: proc(buffer: ^GPUBuffer($T)) {
 	clear(&buffer.cpu)
 }
 
-gpu_buffer_submit :: proc(buffer: ^GPUBuffer($T)) {
-	contents := buffer.gpu->contents()
+gpu_buffer_submit :: proc(buffer: ^GPUBuffer($T), slot: int) {
+	if buffer.caps[slot] < len(buffer.cpu) {
+		buffer.gpu_ring[slot]->release()
+		for buffer.caps[slot] < len(buffer.cpu) do buffer.caps[slot] *= 2
+
+		buffer.gpu_ring[slot] = buffer.device->newBufferWithLength(
+			cast(NS.UInteger)buffer.caps[slot] * size_of(T),
+			{},
+		)
+	}
+
+	contents := buffer.gpu_ring[slot]->contents()
 	mem.copy(raw_data(contents), raw_data(buffer.cpu), len(buffer.cpu) * size_of(T))
 }
 
 gpu_buffer_delete :: proc(buffer: ^GPUBuffer($T)) {
 	delete(buffer.cpu)
-	buffer.gpu->release()
+
+	for gpu in buffer.gpu_ring {
+		gpu->release()
+	}
 }
