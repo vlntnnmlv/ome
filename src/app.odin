@@ -2,10 +2,6 @@ package ome
 
 import "core:log"
 
-// import NS "core:sys/darwin/Foundation"
-// import MTL "vendor:darwin/Metal"
-// import CA "vendor:darwin/QuartzCore"
-
 import SDL "vendor:sdl3"
 
 App :: struct {
