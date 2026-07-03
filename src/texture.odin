@@ -52,13 +52,26 @@ texture_manager_rebuild :: proc(texture_manager: ^TextureManager) {
 	texture_manager.encoder->setSamplerState(texture_manager.sampler, MAX_TEXTURES)
 }
 
+CommonString :: union {
+	string,
+	cstring,
+}
+
 texture_create :: proc(
 	app: ^App,
 	texture_manager: ^TextureManager,
-	path: string,
+	path: CommonString,
 ) -> TextureHandle {
 	w, h, channels: i32
-	cpath := strings.clone_to_cstring(path)
+	cpath: cstring
+
+	switch p in path {
+	case string:
+		cpath = strings.clone_to_cstring(p)
+	case cstring:
+		cpath = p
+	}
+
 	defer delete(cpath)
 
 	pixels := STBI.load(cpath, &w, &h, &channels, 4)

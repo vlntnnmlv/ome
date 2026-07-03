@@ -1,28 +1,33 @@
 using namespace metal;
 
-struct ColoredVertex {
-	float4 position [[position]];
-	float4 color;
-	float2 uv;
+struct VertexIn {
+	packed_float4 position;
+	packed_float2 uv;
+	packed_float4 color;
 	uint   mode;
 	uint   tex_id;
 };
 
-vertex ColoredVertex vertex_main(
-	constant float4 *position [[buffer(0)]],
-	constant float4 *color    [[buffer(1)]],
-	constant float2 *uv       [[buffer(2)]],
-	constant uint  *mode      [[buffer(3)]],
-	constant uint  *tex_id    [[buffer(4)]],
+struct VertexOut {
+	float4 position [[position]];
+	float2 uv;
+	float4 color;
+	uint   mode;
+	uint   tex_id;
+};
+
+vertex VertexOut vertex_main(
+	constant VertexIn *vertices [[buffer(0)]],
 	uint vid                  [[vertex_id]])
 {
-	ColoredVertex vert;
-	vert.position = position[vid];
-	vert.color    = color[vid];
-	vert.uv       = uv[vid].xy;
-	vert.mode     = mode[vid];
-	vert.tex_id   = tex_id[vid];
-	return vert;
+    VertexIn in = vertices[vid];
+    VertexOut out;
+    out.position = float4(in.position);
+    out.uv = float2(in.uv);
+    out.color = float4(in.color);
+    out.mode = in.mode;
+    out.tex_id = in.tex_id;
+	return out;
 }
 
 constant constexpr int MAX_SPRITES = 256;
@@ -33,7 +38,7 @@ struct SpriteTable {
 };
 
 fragment float4 fragment_main(
-	ColoredVertex        vert      [[stage_in]],
+	VertexOut        vert      [[stage_in]],
 	texture2d<float>     font_tex  [[texture(0)]],
 	sampler              font_samp [[sampler(0)]],
     device const SpriteTable& sprites [[buffer(0)]])

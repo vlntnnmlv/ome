@@ -1,5 +1,6 @@
 package ome
 
+import "core:fmt"
 import "core:log"
 
 import SDL "vendor:sdl3"
@@ -35,12 +36,14 @@ app_create :: proc(
 		return nil, false
 	}
 
+	// TODO: Add Vulkan support
 	window := SDL.CreateWindow(
 		title,
 		logical_width,
 		logical_height,
 		{.HIGH_PIXEL_DENSITY, .HIDDEN, .RESIZABLE, .METAL},
 	)
+
 	if window == nil {
 		log.errorf("SDL window couldn't initialize: %v", SDL.GetError())
 		return nil, false
@@ -115,7 +118,10 @@ app_process_events :: proc(app: ^App) {
 				app.pixel_width,
 				app.pixel_height,
 			)
-
+		case .DROP_FILE:
+			drop := e.drop
+			fmt.println(drop.data)
+			texture_create(app, app.renderer.texture_manager, drop.data)
 		case .KEY_DOWN:
 			if e.key.key == SDL.K_ESCAPE {
 				app.quit = true

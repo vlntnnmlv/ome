@@ -34,11 +34,7 @@ Renderer :: struct {
 	texture_manager:      ^TextureManager,
 	font:                 Font,
 	logical_size:         [2]int,
-	vertices:             GPUBuffer(Vertex),
-	colors:               GPUBuffer(Color),
-	uvs:                  GPUBuffer(Uv),
-	tex_ids:              GPUBuffer(TexID),
-	modes:                GPUBuffer(Mode),
+	vertices:             GPUBuffer(Vertex2D),
 	frame_context:        FrameContext,
 	//
 	// Internal
@@ -159,11 +155,7 @@ renderer_create :: proc(
 	renderer.render_calls = make([dynamic]RenderCall)
 	renderer.texture_manager = texture_manager_create()
 	renderer.logical_size = {logical_width, logical_height}
-	renderer.vertices = gpu_buffer_create(Vertex, renderer.device)
-	renderer.colors = gpu_buffer_create(Color, renderer.device)
-	renderer.uvs = gpu_buffer_create(Uv, renderer.device)
-	renderer.modes = gpu_buffer_create(Mode, renderer.device)
-	renderer.tex_ids = gpu_buffer_create(TexID, renderer.device)
+	renderer.vertices = gpu_buffer_create(Vertex2D, renderer.device)
 
 	renderer.clear_color = MTL.ClearColor {
 		clear_color.r,
@@ -205,46 +197,22 @@ renderer_begin :: proc(renderer: ^Renderer) {
 	)
 
 	gpu_buffer_clear(&renderer.vertices)
-	gpu_buffer_clear(&renderer.colors)
-	gpu_buffer_clear(&renderer.uvs)
-	gpu_buffer_clear(&renderer.modes)
-	gpu_buffer_clear(&renderer.tex_ids)
+	// gpu_buffer_clear(&renderer.colors)
+	// gpu_buffer_clear(&renderer.uvs)
+	// gpu_buffer_clear(&renderer.modes)
+	// gpu_buffer_clear(&renderer.tex_ids)
 
 	clear(&renderer.render_calls)
 }
 
 renderer_flush :: proc(renderer: ^Renderer) {
 	gpu_buffer_submit(&renderer.vertices, renderer.frame_slot_index)
-	gpu_buffer_submit(&renderer.colors, renderer.frame_slot_index)
-	gpu_buffer_submit(&renderer.uvs, renderer.frame_slot_index)
-	gpu_buffer_submit(&renderer.modes, renderer.frame_slot_index)
-	gpu_buffer_submit(&renderer.tex_ids, renderer.frame_slot_index)
 
 	renderer.frame_context.encoder->setRenderPipelineState(renderer.pipeline_state)
 	renderer.frame_context.encoder->setVertexBuffer(
 		renderer.vertices.gpu_ring[renderer.frame_slot_index],
 		0,
 		0,
-	)
-	renderer.frame_context.encoder->setVertexBuffer(
-		renderer.colors.gpu_ring[renderer.frame_slot_index],
-		0,
-		1,
-	)
-	renderer.frame_context.encoder->setVertexBuffer(
-		renderer.uvs.gpu_ring[renderer.frame_slot_index],
-		0,
-		2,
-	)
-	renderer.frame_context.encoder->setVertexBuffer(
-		renderer.modes.gpu_ring[renderer.frame_slot_index],
-		0,
-		3,
-	)
-	renderer.frame_context.encoder->setVertexBuffer(
-		renderer.tex_ids.gpu_ring[renderer.frame_slot_index],
-		0,
-		4,
 	)
 
 	if renderer.font.texture != nil {
@@ -293,8 +261,14 @@ resolve_color :: proc(color: Maybe(Color)) -> Color {
 	return BLACK_COLOR
 }
 
-render_line :: proc(renderer: ^Renderer, start: [2]f32, end: [2]f32, color: Maybe(Color) = nil) {
-	graphics_add_points(renderer, {start, end}, resolve_color(color))
+render_line :: proc(
+	renderer: ^Renderer,
+	start: [2]f32,
+	end: [2]f32,
+	color: Maybe(Color) = nil,
+	thickness: int = 1,
+) {
+	graphics_add_points(renderer, {start, end}, resolve_color(color), false, thickness)
 }
 
 render_segments :: proc(
@@ -352,10 +326,6 @@ renderer_delete :: proc(renderer: ^Renderer) {
 
 	delete(renderer.render_calls)
 	gpu_buffer_delete(&renderer.vertices)
-	gpu_buffer_delete(&renderer.uvs)
-	gpu_buffer_delete(&renderer.colors)
-	gpu_buffer_delete(&renderer.modes)
-	gpu_buffer_delete(&renderer.tex_ids)
 
 	free(renderer.frame_complete_block)
 

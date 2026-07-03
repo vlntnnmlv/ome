@@ -11,6 +11,7 @@ main :: proc() {
 	mem.tracking_allocator_init(&tracking_allocator, context.allocator)
 	context.allocator = mem.tracking_allocator(&tracking_allocator)
 
+
 	defer {
 		if len(tracking_allocator.allocation_map) > 0 {
 			fmt.eprintf(
@@ -63,7 +64,7 @@ main :: proc() {
 		point_d.x = (math.sin(app.time_manager.time * 10) + 1) / 2 * width
 
 		app_pre_render(app)
-		render_line(app.renderer, [2]f32{0, 0}, [2]f32{width, height}, Color{1, 0, 0, 1})
+		render_line(app.renderer, [2]f32{0, 0}, [2]f32{width, height}, Color{1, 0, 0, 1}, 2)
 		render_segments(
 			app.renderer,
 			[][2]f32{point_a, point_b, point_c, point_d},

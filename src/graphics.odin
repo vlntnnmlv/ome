@@ -3,14 +3,23 @@ package ome
 import MTL "vendor:darwin/Metal"
 import STBTT "vendor:stb/truetype"
 
-Vertex :: distinct [4]f32
-Uv :: distinct [2]f32
 Mode :: enum u32 {
 	PRIMITIVE = 0,
 	TEXT      = 1,
 	TEXTURE   = 2,
 }
+
+Position :: distinct [4]f32
+Uv :: distinct [2]f32
 TexID :: distinct u32
+
+Vertex2D :: struct {
+	position: Position,
+	uv:       Uv,
+	color:    Color,
+	mode:     Mode,
+	tex_id:   TexID,
+}
 
 graphics_append_render_call :: proc(
 	renderer: ^Renderer,
@@ -31,34 +40,38 @@ graphics_add_points :: proc(
 	points: [][2]f32,
 	color: Color,
 	fill: bool = false,
+	thickness: int = 1,
 ) {
 	start := len(renderer.vertices.cpu)
-	vertices := points_to_vertices(renderer.logical_size, points)
+	positions: [dynamic]Position
 
-	vertices_count := len(points)
+	if thickness > 1 {
+		positions = points_to_vertices_positions_thickness(
+			renderer.logical_size,
+			points,
+			thickness,
+		)
+	} else {
+		positions = points_to_vertices_positions(renderer.logical_size, points)
+	}
+
+	vertices: []Vertex2D = vertices_positions_to_vertices(positions[:], color)
 	gpu_buffer_append(&renderer.vertices, vertices[:])
-	gpu_buffer_fill_zeros_n(&renderer.uvs, vertices_count)
-	gpu_buffer_fill_n(&renderer.colors, color, vertices_count)
-	gpu_buffer_fill_zeros_n(&renderer.modes, vertices_count)
-	gpu_buffer_fill_zeros_n(&renderer.tex_ids, vertices_count)
 
 	type: MTL.PrimitiveType = .LineStrip
-	if fill do type = .Triangle
-	graphics_append_render_call(renderer, type, start, vertices_count)
+	if fill || thickness > 1 do type = .Triangle
+	graphics_append_render_call(renderer, type, start, len(vertices))
 }
 
 graphics_add_quad :: proc(renderer: ^Renderer, rect: Rect, color: Color) {
 	start := len(renderer.vertices.cpu)
-	vertices := rect_to_vertices(renderer.logical_size, rect)
+	positions := rect_to_vertices_positions(renderer.logical_size, rect)
 
-	vertices_count := len(vertices)
-	gpu_buffer_append(&renderer.vertices, vertices[:])
-	gpu_buffer_fill_zeros_n(&renderer.uvs, vertices_count)
-	gpu_buffer_fill_n(&renderer.colors, color, vertices_count)
-	gpu_buffer_fill_zeros_n(&renderer.modes, vertices_count)
-	gpu_buffer_fill_zeros_n(&renderer.tex_ids, vertices_count)
+	vertices := vertices_positions_to_vertices(positions[:], color)
 
-	graphics_append_render_call(renderer, .Triangle, start, vertices_count)
+	gpu_buffer_append(&renderer.vertices, vertices)
+
+	graphics_append_render_call(renderer, .Triangle, start, len(vertices))
 }
 
 graphics_add_text :: proc(
@@ -75,7 +88,7 @@ graphics_add_text :: proc(
 	y := rect.y
 
 	cap := len(text) * VERTICES_PER_QUAD
-	total_vertices := make([dynamic]Vertex, 0, cap, context.temp_allocator)
+	total_positions := make([dynamic]Position, 0, cap, context.temp_allocator)
 	total_uvs := make([dynamic]Uv, 0, cap, context.temp_allocator)
 
 	start := len(renderer.vertices.cpu)
@@ -94,7 +107,7 @@ graphics_add_text :: proc(
 		)
 
 		char_rect := Rect{quad.x0, quad.y0, quad.x1 - quad.x0, quad.y1 - quad.y0}
-		vertices := rect_to_vertices(renderer.logical_size, char_rect)
+		vertices := rect_to_vertices_positions(renderer.logical_size, char_rect)
 
 		uvs := [VERTICES_PER_QUAD]Uv {
 			{quad.s0, quad.t0},
@@ -105,18 +118,20 @@ graphics_add_text :: proc(
 			{quad.s1, quad.t0},
 		}
 
-		append(&total_vertices, ..vertices[:])
+		append(&total_positions, ..vertices[:])
 		append(&total_uvs, ..uvs[:])
 	}
 
-	total_vertices_length := len(total_vertices)
-	gpu_buffer_append(&renderer.vertices, total_vertices[:])
-	gpu_buffer_append(&renderer.uvs, total_uvs[:])
-	gpu_buffer_fill_n(&renderer.colors, color, total_vertices_length)
-	gpu_buffer_fill_n(&renderer.modes, Mode.TEXT, total_vertices_length)
-	gpu_buffer_fill_n(&renderer.tex_ids, TexID{}, total_vertices_length)
+	vertices := vertices_positions_and_uvs_to_vertices(
+		total_positions[:],
+		total_uvs[:],
+		color,
+		Mode.TEXT,
+	)
 
-	graphics_append_render_call(renderer, .Triangle, start, total_vertices_length)
+	gpu_buffer_append(&renderer.vertices, vertices)
+
+	graphics_append_render_call(renderer, .Triangle, start, len(vertices))
 }
 
 graphics_add_texture :: proc(
@@ -127,7 +142,7 @@ graphics_add_texture :: proc(
 	slice_offset: Maybe(RectOffset) = nil,
 ) {
 	start := len(renderer.vertices.cpu)
-	positions: [dynamic]Vertex
+	positions: [dynamic]Position
 	uvs: [dynamic]Uv
 
 	if rslice_offset, ok := slice_offset.?; ok {
@@ -138,16 +153,19 @@ graphics_add_texture :: proc(
 		positions = rect_to_vertices_nine_slice(renderer.logical_size, rect, rslice_offset)
 		uvs = offset_to_uvs_nine_slice(rslice_offset, tw, th)
 	} else {
-		positions = rect_to_vertices(renderer.logical_size, rect)
+		positions = rect_to_vertices_positions(renderer.logical_size, rect)
 		uvs = rect_to_uvs({0, 0, 1, 1})
 	}
 
-	vertices_count := len(positions)
-	gpu_buffer_append(&renderer.vertices, positions[:])
-	gpu_buffer_append(&renderer.uvs, uvs[:])
-	gpu_buffer_fill_n(&renderer.colors, color, vertices_count)
-	gpu_buffer_fill_n(&renderer.modes, Mode.TEXTURE, vertices_count)
-	gpu_buffer_fill_n(&renderer.tex_ids, TexID(texture_handle), vertices_count)
+	vertices := vertices_positions_and_uvs_to_vertices(
+		positions[:],
+		uvs[:],
+		color,
+		Mode.TEXTURE,
+		TexID(texture_handle),
+	)
 
-	graphics_append_render_call(renderer, .Triangle, start, vertices_count)
+	gpu_buffer_append(&renderer.vertices, vertices)
+
+	graphics_append_render_call(renderer, .Triangle, start, len(vertices))
 }
