@@ -11,6 +11,7 @@ import STBI "vendor:stb/image"
 import STBTT "vendor:stb/truetype"
 
 INITIAL_BITMAP_SIZE :: 1024
+REFERENCE_FONT_SIZE :: 32
 
 CharAtStart :: 32
 CharAmount :: 95
@@ -31,7 +32,22 @@ Font :: struct {
 	sampler:     ^MTL.SamplerState,
 }
 
-REFERENCE_FONT_SIZE :: 32
+FontManager :: struct {
+	fonts: [dynamic]^Font,
+}
+
+FontHandle :: distinct u32
+
+font_manager_create :: proc() -> ^FontManager {
+	font_manager := new(FontManager)
+	font_manager.fonts = make([dynamic]^Font)
+
+	return font_manager
+}
+
+font_load :: proc() {
+
+}
 
 assets_load_font :: proc(renderer: ^Renderer, path: string, sizes: []u32 = {}) {
 	renderer.font.path = path

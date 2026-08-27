@@ -1,12 +1,13 @@
 package ome
 
+
 import MTL "vendor:darwin/Metal"
 import STBTT "vendor:stb/truetype"
 
 Mode :: enum u32 {
-	PRIMITIVE = 0,
-	TEXT      = 1,
-	TEXTURE   = 2,
+	Primitive = 0,
+	Text      = 1,
+	Texture   = 2,
 }
 
 Position :: distinct [4]f32
@@ -16,7 +17,7 @@ TexID :: distinct u32
 Vertex2D :: struct {
 	position: Position,
 	uv:       Uv,
-	color:    Color,
+	color:    [4]f32,
 	mode:     Mode,
 	tex_id:   TexID,
 }
@@ -126,13 +127,25 @@ graphics_add_text :: proc(
 		total_positions[:],
 		total_uvs[:],
 		color,
-		Mode.TEXT,
+		Mode.Text,
 	)
 
 	gpu_buffer_append(&renderer.vertices, vertices)
 
 	graphics_append_render_call(renderer, .Triangle, start, len(vertices))
 }
+
+// graphics_add_sprite :: proc(
+// 	renderer: ^Renderer,
+// 	atlas_handle: TextureHandle,
+// 	sprite: [4]Uv,
+// 	rect: Rect,
+// 	color: Color,
+// 	slice_offset: Maybe(RectOffset) = nil,
+// )
+// {
+
+// }
 
 graphics_add_texture :: proc(
 	renderer: ^Renderer,
@@ -161,7 +174,7 @@ graphics_add_texture :: proc(
 		positions[:],
 		uvs[:],
 		color,
-		Mode.TEXTURE,
+		Mode.Texture,
 		TexID(texture_handle),
 	)
 

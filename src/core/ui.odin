@@ -12,17 +12,12 @@ RectOffset :: struct {
 	left, right, top, bottom: f32,
 }
 
-Color :: distinct [4]f32
-INVALID_COLOR :: Color{-1, -1, -1, -1}
-TRANSPARENT_COLOR :: Color{0, 0, 0, 0}
-BLACK_COLOR :: Color{0, 0, 0, 1}
-
 UIPanelHandle :: distinct u32
 
 UIPanelFillType :: enum {
-	START,
-	END,
-	FILL,
+	Start,
+	End,
+	Fill,
 }
 
 UIPanelSize :: struct {
@@ -66,8 +61,8 @@ ui_context_create_panel :: proc(
 	parent_handle: Maybe(UIPanelHandle),
 	rect: Rect,
 	spec: UIPanelSpec,
-	size: UIPanelSize = {.FILL, 0, .FILL, 0},
-	color: Color = INVALID_COLOR,
+	size: UIPanelSize = {.Fill, 0, .Fill, 0},
+	color: Color = TRANSPARENT_COLOR,
 ) -> UIPanelHandle {
 	handle := UIPanelHandle(len(ui_context.panels))
 
@@ -95,8 +90,8 @@ UIText :: struct {
 }
 
 UIStackOrientation :: enum {
-	VERTICAL,
-	HORIZONTAL,
+	Vertical,
+	Horizontal,
 }
 
 UIStack :: struct {
@@ -113,8 +108,8 @@ ui_create_panel :: proc(
 	ui_context: ^UIContext,
 	parent: Maybe(UIPanelHandle),
 	rect: Rect,
-	size: UIPanelSize = {.FILL, 0, .FILL, 0},
-	color: Color = INVALID_COLOR,
+	size: UIPanelSize = {.Fill, 0, .Fill, 0},
+	color: Color = TRANSPARENT_COLOR,
 ) -> UIPanelHandle {
 	panel_handle := ui_context_create_panel(ui_context, parent, rect, nil, size, color)
 	return panel_handle
@@ -125,8 +120,8 @@ ui_create_text :: proc(
 	parent: UIPanelHandle,
 	rect: Rect,
 	text: string,
-	size: UIPanelSize = {.FILL, 0, .FILL, 0},
-	color: Color = INVALID_COLOR,
+	size: UIPanelSize = {.Fill, 0, .Fill, 0},
+	color: Color = TRANSPARENT_COLOR,
 ) -> UIPanelHandle {
 	ui_text := UIText {
 		builder = new(strings.Builder),
@@ -144,8 +139,8 @@ ui_create_stack :: proc(
 	rect: Rect,
 	orientation: UIStackOrientation,
 	spacing: f32 = 0,
-	size: UIPanelSize = {.FILL, 0, .FILL, 0},
-	color: Color = INVALID_COLOR,
+	size: UIPanelSize = {.Fill, 0, .Fill, 0},
+	color: Color = TRANSPARENT_COLOR,
 ) -> UIPanelHandle {
 	return ui_context_create_panel(
 		ui_context,
@@ -214,10 +209,10 @@ ui_validate :: proc(ui_context: ^UIContext, root_handle: UIPanelHandle) {
 		child_width: f32 = 0
 		child_height: f32 = 0
 		switch spec.orientation {
-		case .VERTICAL:
+		case .Vertical:
 			child_width = panel.rect.w
 			child_height = (panel.rect.h - spec.spacing * (children_count - 1)) / children_count
-		case .HORIZONTAL:
+		case .Horizontal:
 			child_width = (panel.rect.w - spec.spacing * (children_count - 1)) / children_count
 			child_height = panel.rect.h
 		}
@@ -227,9 +222,9 @@ ui_validate :: proc(ui_context: ^UIContext, root_handle: UIPanelHandle) {
 			child.rect.w = child_width
 			child.rect.h = child_height
 			switch spec.orientation {
-			case .VERTICAL:
+			case .Vertical:
 				child.rect.y = cast(f32)i * (child_height + spec.spacing)
-			case .HORIZONTAL:
+			case .Horizontal:
 				child.rect.x = cast(f32)i * (child_width + spec.spacing)
 			}
 		}
@@ -240,25 +235,25 @@ ui_validate :: proc(ui_context: ^UIContext, root_handle: UIPanelHandle) {
 
 		if parent.spec == nil {
 			switch panel.size.horizontal_fill {
-			case .START:
+			case .Start:
 				panel.rect.x = 0
 				panel.rect.w = panel.size.horizontal_size
-			case .END:
+			case .End:
 				panel.rect.x = parent.rect.w - panel.size.horizontal_size
 				panel.rect.w = panel.size.horizontal_size
-			case .FILL:
+			case .Fill:
 				panel.rect.x = 0
 				panel.rect.w = parent.rect.w
 			}
 
 			switch panel.size.vertical_fill {
-			case .START:
+			case .Start:
 				panel.rect.y = 0
 				panel.rect.h = panel.size.vertical_size
-			case .END:
+			case .End:
 				panel.rect.y = parent.rect.h - panel.size.vertical_size
 				panel.rect.h = panel.size.vertical_size
-			case .FILL:
+			case .Fill:
 				panel.rect.y = 0
 				panel.rect.h = parent.rect.h
 			}

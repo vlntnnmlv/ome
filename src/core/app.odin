@@ -5,26 +5,29 @@ import "core:log"
 
 import SDL "vendor:sdl3"
 
-App :: struct {
+WindowInfo :: struct {
 	logical_height: int,
 	logical_width:  int,
 	pixel_width:    int,
 	pixel_height:   int,
 	pixel_ratio:    f32,
-	window:         ^SDL.Window,
-	renderer:       ^Renderer,
-	key_callbacks:  map[u64]KeyCallback,
-	quit:           bool,
-	time_manager:   TimeManager,
-	ui_context:     UIContext,
+}
+
+App :: struct {
+	window_info:   WindowInfo,
+	window:        ^SDL.Window,
+	renderer:      ^Renderer,
+	key_callbacks: map[u64]KeyCallback,
+	quit:          bool,
+	time_manager:  TimeManager,
+	ui_context:    UIContext,
 }
 
 KeyCallback :: proc(ctx: ^App)
-
 app_create :: proc(
 	title: cstring,
 	logical_width, logical_height: i32,
-	clear_color: [4]f64 = {0.1, 0.1, 0.12, 1.0},
+	clear_color: Color = {0, 34, 44, 255},
 ) -> (
 	^App,
 	bool,
@@ -36,12 +39,13 @@ app_create :: proc(
 		return nil, false
 	}
 
+
 	// TODO: Add Vulkan support
 	window := SDL.CreateWindow(
 		title,
 		logical_width,
 		logical_height,
-		{.HIGH_PIXEL_DENSITY, .HIDDEN, .RESIZABLE, .METAL},
+		{.HIGH_PIXEL_DENSITY, .HIDDEN, .RESIZABLE},
 	)
 
 	if window == nil {
@@ -54,19 +58,17 @@ app_create :: proc(
 
 	app := new(App)
 	app.window = window
-	app.logical_width = cast(int)logical_width
-	app.logical_height = cast(int)logical_height
-	app.pixel_width = cast(int)pixel_width
-	app.pixel_height = cast(int)pixel_height
-	app.pixel_ratio = f32(app.pixel_width) / f32(app.logical_width)
+	app.window_info.logical_width = cast(int)logical_width
+	app.window_info.logical_height = cast(int)logical_height
+	app.window_info.pixel_width = cast(int)pixel_width
+	app.window_info.pixel_height = cast(int)pixel_height
+	app.window_info.pixel_ratio =
+		f32(app.window_info.pixel_width) / f32(app.window_info.logical_width)
 
 	if renderer, ok := renderer_create(
 		app.window,
-		app.logical_width,
-		app.logical_height,
-		app.pixel_width,
-		app.pixel_height,
-		clear_color,
+		app.window_info,
+		color_to_linear64(clear_color),
 	); !ok {
 		return nil, false
 	} else {
@@ -87,8 +89,8 @@ app_init_ui :: proc(app: ^App) {
 	app.ui_context.root_handle = ui_create_panel(
 		&app.ui_context,
 		nil,
-		Rect{0, 0, cast(f32)app.pixel_width, cast(f32)app.pixel_height},
-		{.FILL, 0, .FILL, 0},
+		Rect{0, 0, cast(f32)app.window_info.pixel_width, cast(f32)app.window_info.pixel_height},
+		{.Fill, 0, .Fill, 0},
 		TRANSPARENT_COLOR,
 	)
 }
@@ -105,23 +107,24 @@ app_process_events :: proc(app: ^App) {
 			SDL.GetWindowSizeInPixels(app.window, &pw, &ph)
 			SDL.GetWindowSize(app.window, &lw, &lh)
 
-			app.pixel_width = cast(int)pw
-			app.pixel_height = cast(int)ph
-			app.logical_width = cast(int)lw
-			app.logical_height = cast(int)lh
+			app.window_info.pixel_width = cast(int)pw
+			app.window_info.pixel_height = cast(int)ph
+			app.window_info.logical_width = cast(int)lw
+			app.window_info.logical_height = cast(int)lh
 
-			app.pixel_ratio = f32(app.pixel_width) / f32(app.logical_width)
+			app.window_info.pixel_ratio =
+				f32(app.window_info.pixel_width) / f32(app.window_info.logical_width)
 			renderer_resize(
 				app.renderer,
-				app.logical_width,
-				app.logical_height,
-				app.pixel_width,
-				app.pixel_height,
+				app.window_info.logical_width,
+				app.window_info.logical_height,
+				app.window_info.pixel_width,
+				app.window_info.pixel_height,
 			)
 		case .DROP_FILE:
 			drop := e.drop
 			fmt.println(drop.data)
-			texture_create(app, app.renderer.texture_manager, drop.data)
+			texture_create(app, app.renderer.texture_manager, string(drop.data), "tmp")
 		case .KEY_DOWN:
 			if e.key.key == SDL.K_ESCAPE {
 				app.quit = true

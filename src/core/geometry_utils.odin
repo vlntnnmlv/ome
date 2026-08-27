@@ -126,7 +126,7 @@ vertices_positions_to_vertices :: proc(
 	for p, i in positions {
 		vertices[i] = Vertex2D {
 			position = p,
-			color    = color,
+			color    = color_to_linear32(color),
 			mode     = mode,
 			tex_id   = tex_id,
 		}
@@ -147,7 +147,7 @@ vertices_positions_and_uvs_to_vertices :: proc(
 		vertices[i] = Vertex2D {
 			position = p,
 			uv       = uvs[i],
-			color    = color,
+			color    = color_to_linear32(color),
 			mode     = mode,
 			tex_id   = tex_id,
 		}
@@ -171,10 +171,10 @@ points_to_vertices_positions_thickness :: proc(
 		dir := linalg.vector_normalize0(point_b - point_a)
 		perp := [2]f32{-dir.y, dir.x} * half
 
-		p0 := point_to_vertex(logical_size, point_a + perp * cast(f32)thickness)
-		p1 := point_to_vertex(logical_size, point_a - perp * cast(f32)thickness)
-		p2 := point_to_vertex(logical_size, point_b - perp * cast(f32)thickness)
-		p3 := point_to_vertex(logical_size, point_b + perp * cast(f32)thickness)
+		p0 := point_to_vertex(logical_size, point_a + perp * cast(f32)thickness / 2)
+		p1 := point_to_vertex(logical_size, point_a - perp * cast(f32)thickness / 2)
+		p2 := point_to_vertex(logical_size, point_b - perp * cast(f32)thickness / 2)
+		p3 := point_to_vertex(logical_size, point_b + perp * cast(f32)thickness / 2)
 
 		append(&vertices, p0, p1, p2, p0, p2, p3)
 	}

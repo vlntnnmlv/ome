@@ -7,11 +7,27 @@ import STBI "vendor:stb/image"
 
 MAX_TEXTURES :: 256
 
+Texture :: struct {
+	data: ^MTL.Texture,
+	name: string,
+}
+
+TextureData :: struct {
+	name:       string,
+	pixels:     [^]byte,
+	w:          i32,
+	h:          i32,
+	channels:   i32,
+	in_atlas:   bool,
+	atlas_rect: Rect,
+}
+
 TextureManager :: struct {
-	textures:  [dynamic]^MTL.Texture,
-	sampler:   ^MTL.SamplerState,
-	encoder:   ^MTL.ArgumentEncoder,
-	arguments: ^MTL.Buffer,
+	textures:      [dynamic]^MTL.Texture,
+	texture_names: [dynamic]string,
+	sampler:       ^MTL.SamplerState,
+	encoder:       ^MTL.ArgumentEncoder,
+	arguments:     ^MTL.Buffer,
 }
 
 TextureHandle :: distinct u32
@@ -45,42 +61,53 @@ texture_manager_init :: proc(
 
 texture_manager_rebuild :: proc(texture_manager: ^TextureManager) {
 	texture_manager.encoder->setArgumentBufferWithOffset(texture_manager.arguments, 0)
-	for texture, i in texture_manager.textures {
+	i := 0
+	for texture in texture_manager.textures {
 		texture_manager.encoder->setTexture(texture, cast(NS.UInteger)i)
+		i += 1
 	}
 
 	texture_manager.encoder->setSamplerState(texture_manager.sampler, MAX_TEXTURES)
 }
 
-CommonString :: union {
-	string,
-	cstring,
-}
-
 texture_create :: proc(
 	app: ^App,
 	texture_manager: ^TextureManager,
-	path: CommonString,
+	path: string,
+	name: string,
 ) -> TextureHandle {
 	w, h, channels: i32
-	cpath: cstring
 
-	switch p in path {
-	case string:
-		cpath = strings.clone_to_cstring(p)
-	case cstring:
-		cpath = p
+	pixels := STBI.load(
+		strings.clone_to_cstring(path, allocator = context.temp_allocator),
+		&w,
+		&h,
+		&channels,
+		4,
+	)
+	defer STBI.image_free(pixels)
+	defer free_all(context.temp_allocator)
+
+	texture_data := TextureData {
+		pixels   = pixels,
+		w        = w,
+		h        = h,
+		channels = channels,
+		name     = name,
 	}
 
-	defer delete(cpath)
+	return texture_create_from_data(app, texture_manager, texture_data)
+}
 
-	pixels := STBI.load(cpath, &w, &h, &channels, 4)
-	defer STBI.image_free(pixels)
-
+texture_create_from_data :: proc(
+	app: ^App,
+	texture_manager: ^TextureManager,
+	texture_data: TextureData,
+) -> TextureHandle {
 	desc := MTL.TextureDescriptor.texture2DDescriptorWithPixelFormat(
 		.RGBA8Unorm_sRGB,
-		cast(NS.UInteger)w,
-		cast(NS.UInteger)h,
+		cast(NS.UInteger)texture_data.w,
+		cast(NS.UInteger)texture_data.h,
 		false,
 	)
 	desc->setStorageMode(.Shared)
@@ -89,13 +116,16 @@ texture_create :: proc(
 	texture := app.renderer.device->newTextureWithDescriptor(desc)
 	region := MTL.Region {
 		origin = {0, 0, 0},
-		size   = {cast(NS.Integer)w, cast(NS.Integer)h, 1},
+		size   = {cast(NS.Integer)texture_data.w, cast(NS.Integer)texture_data.h, 1},
 	}
-	texture->replaceRegion(region, 0, pixels, cast(NS.UInteger)w * 4)
-	append(&texture_manager.textures, texture)
+	texture->replaceRegion(region, 0, texture_data.pixels, cast(NS.UInteger)texture_data.w * 4)
 
+	append(&texture_manager.textures, texture)
 	texture_manager_rebuild(texture_manager)
-	return TextureHandle(len(texture_manager.textures) - 1)
+
+	handle := TextureHandle(len(texture_manager.textures) - 1)
+	append(&texture_manager.texture_names, texture_data.name)
+	return handle
 }
 
 texture_manager_delete :: proc(texture_manager: ^TextureManager) {
@@ -104,4 +134,5 @@ texture_manager_delete :: proc(texture_manager: ^TextureManager) {
 	}
 
 	delete(texture_manager.textures)
+	delete(texture_manager.texture_names)
 }

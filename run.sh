@@ -1,4 +1,4 @@
 clear; clear; clear;
-odin run src -vet -strict-style -warnings-as-errors
+odin run src/editor -vet -strict-style -vet-tabs -warnings-as-errors
 
-# -vet-tabs
+# -disallow-do

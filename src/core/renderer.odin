@@ -2,6 +2,7 @@ package ome
 
 import "core:log"
 import "core:os"
+import "core:slice"
 import "core:sync"
 
 import NS "core:sys/darwin/Foundation"
@@ -43,9 +44,34 @@ Renderer :: struct {
 	frame_complete_block: ^NS.Block,
 }
 
+shader_compile_slang :: proc(
+	path: string,
+	allocator := context.temp_allocator,
+) -> (
+	source: string,
+	ok: bool,
+) {
+	state, stdout, stderr, err := os.process_exec(
+		os.Process_Desc{command = {"slangc", path, "-target", "metal"}},
+		allocator,
+	)
+	if err != nil {
+		log.errorf("Couldn't run slangc: %v", os.error_string(err))
+		return "", false
+	}
+	if !state.success || state.exit_code != 0 {
+		log.errorf("slangc failed (exit %d):\n%s", state.exit_code, string(stderr))
+		return "", false
+	}
+	if len(stderr) > 0 {
+		log.warnf("slangc: %s", string(stderr))
+	}
+	return string(stdout), true
+}
+
 renderer_create :: proc(
 	window: ^SDL.Window,
-	logical_width, logical_height, pixel_width, pixel_height: int,
+	window_info: WindowInfo,
 	clear_color: [4]f64,
 ) -> (
 	^Renderer,
@@ -71,13 +97,16 @@ renderer_create :: proc(
 			nil,
 		),
 	)
+
 	if native_window == nil {
 		log.errorf("Couldn't get native window")
 		return nil, false
 	}
 
 	swapchain := CA.MetalLayer.layer()
-	swapchain->setDrawableSize(NS.Size{cast(NS.Float)pixel_width, cast(NS.Float)pixel_height})
+	swapchain->setDrawableSize(
+		NS.Size{cast(NS.Float)window_info.pixel_width, cast(NS.Float)window_info.pixel_height},
+	)
 	swapchain->setDevice(device)
 	swapchain->setPixelFormat(.BGRA8Unorm_sRGB)
 	swapchain->setFramebufferOnly(true)
@@ -90,22 +119,27 @@ renderer_create :: proc(
 	command_q := device->newCommandQueue()
 	compile_options := NS.new(MTL.CompileOptions)
 
-	shader_file, shader_file_load_error := os.read_entire_file_from_path(
-		"assets/shaders/shader.metal",
-		context.temp_allocator,
-	)
 
-	defer delete(shader_file, context.temp_allocator)
-	if shader_file_load_error != nil {
-		log.errorf(
-			"Couldn't load shader files. Error: %v",
-			os.error_string(shader_file_load_error),
-		)
+	// shader_file, shader_file_load_error := os.read_entire_file_from_path(
+	// 	"assets/shaders/shader.metal",
+	// 	context.temp_allocator,
+	// )
+
+	// defer delete(shader_file, context.temp_allocator)
+	// if shader_file_load_error != nil {
+	// 	log.errorf(
+	// 		"Couldn't load shader files. Error: %v",
+	// 		os.error_string(shader_file_load_error),
+	// 	)
+	// 	return nil, false
+	// }
+
+	shader_source, ok := shader_compile_slang("assets/shaders/shader.slang")
+	if !ok {
 		return nil, false
 	}
-
 	program_library, lib_error := device->newLibraryWithSource(
-		NS.String.alloc()->initWithOdinString(string(shader_file)),
+		NS.String.alloc()->initWithOdinString(string(shader_source)),
 		compile_options,
 	)
 	if lib_error != nil {
@@ -154,7 +188,7 @@ renderer_create :: proc(
 	renderer.pipeline_state = pipeline_state
 	renderer.render_calls = make([dynamic]RenderCall)
 	renderer.texture_manager = texture_manager_create()
-	renderer.logical_size = {logical_width, logical_height}
+	renderer.logical_size = {window_info.logical_width, window_info.logical_height}
 	renderer.vertices = gpu_buffer_create(Vertex2D, renderer.device)
 
 	renderer.clear_color = MTL.ClearColor {
@@ -197,10 +231,6 @@ renderer_begin :: proc(renderer: ^Renderer) {
 	)
 
 	gpu_buffer_clear(&renderer.vertices)
-	// gpu_buffer_clear(&renderer.colors)
-	// gpu_buffer_clear(&renderer.uvs)
-	// gpu_buffer_clear(&renderer.modes)
-	// gpu_buffer_clear(&renderer.tex_ids)
 
 	clear(&renderer.render_calls)
 }
@@ -212,7 +242,7 @@ renderer_flush :: proc(renderer: ^Renderer) {
 	renderer.frame_context.encoder->setVertexBuffer(
 		renderer.vertices.gpu_ring[renderer.frame_slot_index],
 		0,
-		0,
+		1,
 	)
 
 	if renderer.font.texture != nil {
@@ -275,10 +305,54 @@ render_segments :: proc(
 	renderer: ^Renderer,
 	points: [][2]f32,
 	color: Maybe(Color) = nil,
+	thickness: int = 1,
 	fill: bool = false,
 ) {
-	graphics_add_points(renderer, points, resolve_color(color), fill)
+	graphics_add_points(renderer, points, resolve_color(color), fill, thickness)
 }
+
+interpolate :: proc(a: [2]f32, b: [2]f32, phase: f32) -> [2]f32 {
+	return {a.x + (b.x - a.x) * phase, a.y + (b.y - a.y) * phase}
+}
+
+render_curve :: proc(
+	renderer: ^Renderer,
+	curve_points: [][2]f32,
+	color: Maybe(Color) = nil,
+	thickness: int = 1,
+	fill: bool = false,
+) {
+	assert(len(curve_points) == 3, "Curve rendering supports only 3 points")
+
+	points: [100][2]f32
+	for i in 0 ..< 100 {
+		phase: f32 = (f32(i) + 1.0) / 100.0
+		a_to_b := interpolate(curve_points[0], curve_points[1], phase)
+		b_to_c := interpolate(curve_points[1], curve_points[2], phase)
+		points[i] = interpolate(a_to_b, b_to_c, phase)
+	}
+	render_segments(renderer, points[:], resolve_color(color), thickness, fill)
+}
+
+// render_circle :: proc(
+// 	renderer: ^Renderer,
+// 	center: [2]f32,
+// 	radius: f32,
+// 	color: Maybe(Color) = nil,
+// 	thickness: int = 1,
+// 	fill: bool = false,
+// ) {
+// 	left: [2]f32 = center - { radius, 0}
+// 	lefttop [2]
+// 	top: [2]f32 = center + { radius, radius}
+// 	right: [2]f32 = center + { radius, radius}
+// 	bottom: [2]f32 = center + { radius, radius}
+
+// 	render_curve(renderer, , color, thickness, fill)
+// 	render_curve(renderer, , color, thickness, fill)
+// 	render_curve(renderer, , color, thickness, fill)
+// 	render_curve(renderer, , color, thickness, fill)
+// }
 
 render_rect :: proc(renderer: ^Renderer, rect: Rect, color: Maybe(Color) = nil) {
 	graphics_add_quad(renderer, rect, resolve_color(color))
@@ -294,13 +368,34 @@ render_text :: proc(
 	graphics_add_text(renderer, text, font_size, rect, resolve_color(color))
 }
 
-render_texture :: proc(
+render_texture :: proc {
+	render_texture_by_handle,
+	render_texture_by_name,
+}
+
+render_texture_by_handle :: proc(
 	renderer: ^Renderer,
 	handle: TextureHandle,
 	rect: Rect,
 	color: Maybe(Color) = nil,
 	slice_offset: Maybe(RectOffset) = nil,
 ) {
+	graphics_add_texture(renderer, handle, rect, resolve_color(color), slice_offset)
+}
+
+render_texture_by_name :: proc(
+	renderer: ^Renderer,
+	name: string,
+	rect: Rect,
+	color: Maybe(Color) = nil,
+	slice_offset: Maybe(RectOffset) = nil,
+) {
+	i, found := slice.linear_search(renderer.texture_manager.texture_names[:], name)
+	if !found {
+		return
+	}
+
+	handle := TextureHandle(i)
 	graphics_add_texture(renderer, handle, rect, resolve_color(color), slice_offset)
 }
 
