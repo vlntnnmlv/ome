@@ -1,5 +1,6 @@
 package omeeditor
 
+import "base:runtime"
 import "core:fmt"
 import "core:log"
 import "core:math"
@@ -8,29 +9,35 @@ import "core:mem"
 
 import OMECORE "../core"
 
-main :: proc() {
-	// system
-	tracking_allocator: mem.Tracking_Allocator
-	mem.tracking_allocator_init(&tracking_allocator, context.allocator)
-	context.allocator = mem.tracking_allocator(&tracking_allocator)
+track_start :: proc(allocator: mem.Allocator) -> (mem.Allocator, ^mem.Tracking_Allocator) {
+	tracking_allocator: ^mem.Tracking_Allocator = new(mem.Tracking_Allocator)
+	mem.tracking_allocator_init(tracking_allocator, allocator)
+	return mem.tracking_allocator(tracking_allocator), tracking_allocator
+}
 
-	defer {
-		if len(tracking_allocator.allocation_map) > 0 {
-			fmt.eprintf(
-				"=== %v allocations not freed: ===\n",
-				len(tracking_allocator.allocation_map),
-			)
-			for _, entry in tracking_allocator.allocation_map {
-				fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
-			}
+track_finish :: proc(tracking_allocator: ^mem.Tracking_Allocator) {
+	if len(tracking_allocator.allocation_map) > 0 {
+		fmt.eprintf("=== %v allocations not freed: ===\n", len(tracking_allocator.allocation_map))
+		for _, entry in tracking_allocator.allocation_map {
+			fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
 		}
-
-		mem.tracking_allocator_destroy(&tracking_allocator)
 	}
 
-	context.logger = log.create_console_logger()
-	defer log.destroy_console_logger(context.logger)
+	mem.tracking_allocator_destroy(tracking_allocator)
+}
 
+main :: proc() {
+	// system
+	tracked_allocator, tracking_allocator := track_start(context.allocator)
+	context.allocator = tracked_allocator
+
+	defer {
+		track_finish(tracking_allocator)
+	}
+
+	opts: bit_set[runtime.Logger_Option] = {.Level}
+	context.logger = log.create_console_logger(opt = opts)
+	defer log.destroy_console_logger(context.logger)
 
 	// window
 	width: f32 = 1080
@@ -42,15 +49,8 @@ main :: proc() {
 
 	// load assets
 	OMECORE.assets_load_font(app.renderer, "assets/fonts/Iosevka.ttf", {32, 64})
-
-	// h := OMECORE.texture_create(
-	// 	app,
-	// 	app.renderer.texture_manager,
-	// 	"assets/textures/frame.png",
-	// 	"frame",
-	// )
-	// h := texture_atlas_create(app, app.renderer.texture_manager, {"assets/textures/highfive.jpg", "assets/textures/frame.png"}, "a")
-	atlas := OMECORE.sprite_atlas_create_from_directory(app.renderer, "assets/textures/", "atlas")
+	atlas := OMECORE.sprite_atlas_create(app.renderer, "assets/textures/", "main_atlas")
+	defer OMECORE.sprite_atlas_destroy(&atlas)
 
 	size: i32 = 128
 	pixels: [dynamic]byte = make([dynamic]byte, 0, size * size * 4)
@@ -130,9 +130,9 @@ main :: proc() {
 			app.renderer,
 			atlas,
 			"panel",
-			OMECORE.Rect{0, 0, 64, 64},
+			OMECORE.Rect{0, 0, 512, 512},
 			OMECORE.Color{255, 255, 255, 255},
-			// OMECORE.RectOffset{16, 16, 16, 16},
+			OMECORE.RectOffset{2, 2, 2, 2},
 		)
 		// OMECORE.render_texture(
 		// 	app.renderer,

@@ -1,7 +1,5 @@
 package ome
 
-import "core:fmt"
-// import "core:fmt"
 import "core:log"
 import "core:os"
 import "core:slice"
@@ -285,6 +283,8 @@ renderer_present :: proc(renderer: ^Renderer) {
 	renderer.frame_context.pool = nil
 }
 
+// --- RENDERING ---
+
 @(private = "file")
 resolve_color :: proc(color: Maybe(Color)) -> Color {
 	if real_color, ok := color.?; ok {
@@ -335,6 +335,7 @@ render_curve :: proc(
 	}
 	render_segments(renderer, points[:], resolve_color(color), thickness, fill)
 }
+
 
 // render_circle :: proc(
 // 	renderer: ^Renderer,
@@ -443,29 +444,26 @@ render_texture_by_atlas_name :: proc(
 ) {
 	handle := atlas.handle
 
-	// for sprite_name, sprite in atlas.sprites {
-	// 	// fmt.println("sprite:", sprite_name, sprite.uvs, sprite.x, sprite.y, sprite.h, sprite.w)
-	// }
-
 	positions: [dynamic]Position
-	uvs: [dynamic]Uv
+	uvs: []Uv
 
 	sprite: SpriteData = atlas.sprites[name]
 
 	if rslice_offset, ok := slice_offset.?; ok {
-		tex := renderer.texture_manager.textures[handle]
-		tw := cast(f32)tex->width()
-		th := cast(f32)tex->height()
+		// tex := renderer.texture_manager.textures[handle]
 
 		positions = rect_to_vertices_nine_slice(renderer.logical_size, rect, rslice_offset)
-		uvs = offset_to_uvs_nine_slice(rslice_offset, tw, th)
+		uvs = rect_to_uvs_nine_slice_atlas(
+			rslice_offset,
+			sprite.atlas_rect,
+			{atlas.size, atlas.size},
+		)[:]
 	} else {
 		positions = rect_to_vertices_positions(renderer.logical_size, rect)
-		// uvs = sprite.uvs //rect_to_uvs_atlas({sprite.x, sprite.y, sprite.w, sprite.h}, {atlas.size, atlas.size})
+		uvs = sprite.uvs
 	}
 
-	fmt.println(sprite.uvs)
-	graphics_add_texture(renderer, handle, positions[:], sprite.uvs[:], resolve_color(color))
+	graphics_add_texture(renderer, handle, positions[:], uvs, resolve_color(color))
 }
 
 renderer_resize :: proc(

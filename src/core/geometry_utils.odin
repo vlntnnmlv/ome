@@ -1,6 +1,5 @@
 package ome
 
-import "core:fmt"
 import "core:math/linalg"
 import "core:mem"
 VERTICES_PER_QUAD :: 6
@@ -100,7 +99,6 @@ rect_to_uvs_atlas :: proc(
 ) -> [dynamic]Uv {
 	uvs := make([dynamic]Uv, VERTICES_PER_QUAD, allocator)
 
-	fmt.println("rect: ", rect, "atlas_size", atlas_size)
 	tl := Uv{rect.x / atlas_size.x, rect.y / atlas_size.y}
 	bl := Uv{rect.x / atlas_size.x, (rect.y + rect.h) / atlas_size.y}
 	br := Uv{(rect.x + rect.w) / atlas_size.x, (rect.y + rect.h) / atlas_size.y}
@@ -113,6 +111,30 @@ rect_to_uvs_atlas :: proc(
 	uvs[4] = br
 	uvs[5] = tr
 
+	return uvs
+}
+
+rect_to_uvs_nine_slice_atlas :: proc(
+	offset: RectOffset,
+	rect: Rect,
+	atlas_size: [2]f32,
+	allocator: mem.Allocator = context.temp_allocator,
+) -> [dynamic]Uv {
+	relative_offset := RectOffset {
+		offset.left / rect.w,
+		offset.right / rect.w,
+		offset.top / rect.h,
+		offset.bottom / rect.h,
+	}
+
+	tl := Uv{rect.x / atlas_size.x, rect.y / atlas_size.y}
+	br := Uv{(rect.x + rect.w) / atlas_size.x, (rect.y + rect.h) / atlas_size.y}
+
+	uvs := make([dynamic]Uv, VERTICES_PER_NINE_SLICED_QUAD, context.temp_allocator)
+	for cell, i in rect_split_to_grid({tl.x, tl.y, br.x, br.y}, relative_offset) {
+		rect_uvs := rect_to_uvs(cell)
+		copy(uvs[i * VERTICES_PER_QUAD:], rect_uvs[:])
+	}
 	return uvs
 }
 

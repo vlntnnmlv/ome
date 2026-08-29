@@ -1,6 +1,6 @@
 package ome
 
-import "core:fmt"
+import "core:log"
 import "core:mem"
 import "core:path/filepath"
 import "core:strings"
@@ -15,11 +15,13 @@ SpriteAtlas :: struct {
 }
 
 SpriteData :: struct {
-	uvs: []Uv,
-	x:   f32,
-	y:   f32,
-	w:   f32,
-	h:   f32,
+	uvs:        []Uv,
+	atlas_rect: Rect,
+}
+
+sprite_atlas_create :: proc {
+	sprite_atlas_create_from_directory,
+	sprite_atlas_create_from_files,
 }
 
 sprite_atlas_create_from_directory :: proc(
@@ -34,10 +36,14 @@ sprite_atlas_create_from_directory :: proc(
 		delete(names)
 	}
 
-	return sprite_atlas_create(renderer, names[:], atlas_name)
+	return sprite_atlas_create_from_files(renderer, names[:], atlas_name)
 }
 
-sprite_atlas_create :: proc(renderer: ^Renderer, paths: []string, name: string) -> SpriteAtlas {
+sprite_atlas_create_from_files :: proc(
+	renderer: ^Renderer,
+	paths: []string,
+	name: string,
+) -> SpriteAtlas {
 	w, h, channels: i32
 	textures_data: [dynamic]TextureData
 	rects: [dynamic]STBR.Rect
@@ -90,20 +96,19 @@ sprite_atlas_create :: proc(renderer: ^Renderer, paths: []string, name: string) 
 		textures_data[i].in_atlas = bool(rects[i].was_packed)
 
 		sprites[textures_data[i].name] = SpriteData {
-			uvs = rect_to_uvs_atlas(
+			uvs        = rect_to_uvs_atlas(
 				textures_data[i].atlas_rect,
 				{f32(atlas_size), f32(atlas_size)},
 				allocator = context.allocator,
 			)[:],
-			x   = textures_data[i].atlas_rect.x,
-			y   = textures_data[i].atlas_rect.y,
-			w   = textures_data[i].atlas_rect.w,
-			h   = textures_data[i].atlas_rect.h,
+			atlas_rect = textures_data[i].atlas_rect,
 		}
 	}
 
 	if pack_result == 0 {
-		fmt.println("Failed to pack", pack_result)
+		log.warn("Failed to pack")
+	} else {
+		log.info("Atlas packed succesfully")
 	}
 
 	atlas_data: TextureData = {
@@ -120,9 +125,6 @@ sprite_atlas_create :: proc(renderer: ^Renderer, paths: []string, name: string) 
 	}
 
 	handle: TextureHandle = sprite_atlas_build(renderer, textures_data[:], atlas_data)
-	for n, sprite in sprites {
-		fmt.println("Sprite:", n, sprite.uvs, sep = ";")
-	}
 	return SpriteAtlas{handle = handle, sprites = sprites, size = f32(atlas_size)}
 }
 
@@ -158,4 +160,13 @@ sprite_atlas_build :: proc(
 	// 	atlas_data.w * atlas_data.channels,
 	// )
 	return handle
+}
+
+sprite_atlas_destroy :: proc(sprite_atlas: ^SpriteAtlas) {
+	for name, sprite in sprite_atlas.sprites {
+		delete(name)
+		delete(sprite.uvs)
+	}
+
+	delete_map(sprite_atlas.sprites)
 }
