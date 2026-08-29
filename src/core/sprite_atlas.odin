@@ -2,21 +2,31 @@ package ome
 
 import "core:fmt"
 import "core:mem"
+import "core:path/filepath"
 import "core:strings"
 
 import STBI "vendor:stb/image"
 import STBR "vendor:stb/rect_pack"
 
-TextureAtlas :: struct {
-	atlas_handle: TextureHandle,
+SpriteAtlas :: struct {
+	handle:  TextureHandle,
+	sprites: map[string](SpriteData),
+	size:    f32,
 }
 
-texture_atlas_create_from_directory :: proc(
-	app: ^App,
-	texture_manager: ^TextureManager,
+SpriteData :: struct {
+	uvs: []Uv,
+	x:   f32,
+	y:   f32,
+	w:   f32,
+	h:   f32,
+}
+
+sprite_atlas_create_from_directory :: proc(
+	renderer: ^Renderer,
 	directory_path: string,
 	atlas_name: string,
-) -> TextureHandle {
+) -> SpriteAtlas {
 	names: []string = get_texture_paths_in_derectory(directory_path)
 
 	defer {
@@ -24,18 +34,14 @@ texture_atlas_create_from_directory :: proc(
 		delete(names)
 	}
 
-	return texture_atlas_create(app, texture_manager, names[:], atlas_name)
+	return sprite_atlas_create(renderer, names[:], atlas_name)
 }
 
-texture_atlas_create :: proc(
-	app: ^App,
-	texture_manager: ^TextureManager,
-	paths: []string,
-	name: string,
-) -> TextureHandle {
+sprite_atlas_create :: proc(renderer: ^Renderer, paths: []string, name: string) -> SpriteAtlas {
 	w, h, channels: i32
 	textures_data: [dynamic]TextureData
 	rects: [dynamic]STBR.Rect
+	sprites := make(map[string](SpriteData))
 
 	for i in 0 ..< len(paths) {
 		pixels := STBI.load(
@@ -59,6 +65,7 @@ texture_atlas_create :: proc(
 			channels = channels,
 			in_atlas = true,
 			atlas_rect = Rect{w = f32(w), h = f32(h)},
+			name = strings.clone(filepath.stem(paths[i])),
 		}
 		append(&textures_data, texture_data)
 	}
@@ -81,6 +88,18 @@ texture_atlas_create :: proc(
 		textures_data[i].atlas_rect.w = f32(rects[i].w)
 		textures_data[i].atlas_rect.h = f32(rects[i].h)
 		textures_data[i].in_atlas = bool(rects[i].was_packed)
+
+		sprites[textures_data[i].name] = SpriteData {
+			uvs = rect_to_uvs_atlas(
+				textures_data[i].atlas_rect,
+				{f32(atlas_size), f32(atlas_size)},
+				allocator = context.allocator,
+			)[:],
+			x   = textures_data[i].atlas_rect.x,
+			y   = textures_data[i].atlas_rect.y,
+			w   = textures_data[i].atlas_rect.w,
+			h   = textures_data[i].atlas_rect.h,
+		}
 	}
 
 	if pack_result == 0 {
@@ -100,12 +119,15 @@ texture_atlas_create :: proc(
 		defer STBI.image_free(texture_data.pixels)
 	}
 
-	return texture_atlas_build(app, texture_manager, textures_data[:], atlas_data)
+	handle: TextureHandle = sprite_atlas_build(renderer, textures_data[:], atlas_data)
+	for n, sprite in sprites {
+		fmt.println("Sprite:", n, sprite.uvs, sep = ";")
+	}
+	return SpriteAtlas{handle = handle, sprites = sprites, size = f32(atlas_size)}
 }
 
-texture_atlas_build :: proc(
-	app: ^App,
-	texture_manager: ^TextureManager,
+sprite_atlas_build :: proc(
+	renderer: ^Renderer,
 	textures_data: []TextureData,
 	atlas_data: TextureData,
 ) -> TextureHandle {
@@ -125,15 +147,15 @@ texture_atlas_build :: proc(
 		}
 	}
 
-	handle := texture_create_from_data(app, texture_manager, atlas_data)
+	handle := texture_create_from_data(renderer, atlas_data)
 
-	STBI.write_png(
-		"a.png",
-		atlas_data.w,
-		atlas_data.h,
-		atlas_data.channels,
-		atlas_data.pixels,
-		atlas_data.w * atlas_data.channels,
-	)
+	// STBI.write_png(
+	// 	"a.png",
+	// 	atlas_data.w,
+	// 	atlas_data.h,
+	// 	atlas_data.channels,
+	// 	atlas_data.pixels,
+	// 	atlas_data.w * atlas_data.channels,
+	// )
 	return handle
 }

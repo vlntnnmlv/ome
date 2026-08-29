@@ -150,25 +150,12 @@ graphics_add_text :: proc(
 graphics_add_texture :: proc(
 	renderer: ^Renderer,
 	texture_handle: TextureHandle,
-	rect: Rect,
+	positions: []Position,
+	uvs: []Uv,
 	color: Color,
 	slice_offset: Maybe(RectOffset) = nil,
 ) {
 	start := len(renderer.vertices.cpu)
-	positions: [dynamic]Position
-	uvs: [dynamic]Uv
-
-	if rslice_offset, ok := slice_offset.?; ok {
-		tex := renderer.texture_manager.textures[texture_handle]
-		tw := cast(f32)tex->width()
-		th := cast(f32)tex->height()
-
-		positions = rect_to_vertices_nine_slice(renderer.logical_size, rect, rslice_offset)
-		uvs = offset_to_uvs_nine_slice(rslice_offset, tw, th)
-	} else {
-		positions = rect_to_vertices_positions(renderer.logical_size, rect)
-		uvs = rect_to_uvs({0, 0, 1, 1})
-	}
 
 	vertices := vertices_positions_and_uvs_to_vertices(
 		positions[:],

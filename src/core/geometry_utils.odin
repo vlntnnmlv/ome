@@ -1,6 +1,8 @@
 package ome
 
+import "core:fmt"
 import "core:math/linalg"
+import "core:mem"
 VERTICES_PER_QUAD :: 6
 VERTICES_PER_NINE_SLICED_QUAD :: 9 * VERTICES_PER_QUAD
 UNIT_RECT :: Rect{0, 0, 1, 1}
@@ -80,6 +82,29 @@ rect_to_uvs :: proc(rect: Rect) -> [dynamic]Uv {
 	bl := Uv{rect.x, rect.y + rect.h}
 	br := Uv{rect.x + rect.w, rect.y + rect.h}
 	tr := Uv{rect.x + rect.w, rect.y}
+
+	uvs[0] = tl
+	uvs[1] = bl
+	uvs[2] = br
+	uvs[3] = tl
+	uvs[4] = br
+	uvs[5] = tr
+
+	return uvs
+}
+
+rect_to_uvs_atlas :: proc(
+	rect: Rect,
+	atlas_size: [2]f32,
+	allocator: mem.Allocator = context.temp_allocator,
+) -> [dynamic]Uv {
+	uvs := make([dynamic]Uv, VERTICES_PER_QUAD, allocator)
+
+	fmt.println("rect: ", rect, "atlas_size", atlas_size)
+	tl := Uv{rect.x / atlas_size.x, rect.y / atlas_size.y}
+	bl := Uv{rect.x / atlas_size.x, (rect.y + rect.h) / atlas_size.y}
+	br := Uv{(rect.x + rect.w) / atlas_size.x, (rect.y + rect.h) / atlas_size.y}
+	tr := Uv{(rect.x + rect.w) / atlas_size.x, rect.y / atlas_size.y}
 
 	uvs[0] = tl
 	uvs[1] = bl

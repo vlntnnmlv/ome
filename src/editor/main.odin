@@ -43,14 +43,14 @@ main :: proc() {
 	// load assets
 	OMECORE.assets_load_font(app.renderer, "assets/fonts/Iosevka.ttf", {32, 64})
 
-	// h := texture_create(app, app.renderer.texture_manager, path)
-	// h := texture_atlas_create(app, app.renderer.texture_manager, {"assets/textures/highfive.jpg", "assets/textures/frame.png"}, "a")
-	// h := OMECORE.texture_atlas_create_from_directory(
+	// h := OMECORE.texture_create(
 	// 	app,
 	// 	app.renderer.texture_manager,
-	// 	"assets/textures/",
-	// 	"atlas",
+	// 	"assets/textures/frame.png",
+	// 	"frame",
 	// )
+	// h := texture_atlas_create(app, app.renderer.texture_manager, {"assets/textures/highfive.jpg", "assets/textures/frame.png"}, "a")
+	atlas := OMECORE.sprite_atlas_create_from_directory(app.renderer, "assets/textures/", "atlas")
 
 	size: i32 = 128
 	pixels: [dynamic]byte = make([dynamic]byte, 0, size * size * 4)
@@ -70,7 +70,7 @@ main :: proc() {
 		in_atlas = false,
 		name     = "transparent",
 	}
-	OMECORE.texture_create_from_data(app, app.renderer.texture_manager, td)
+	OMECORE.texture_create_from_data(app.renderer, td)
 	// setup user inut
 	// app.key_callbacks[SDL.K_W] = proc(app: ^App) {rect.y += app.dt * 100}
 
@@ -126,14 +126,20 @@ main :: proc() {
 		// 	OMECORE.Rect{500, 300, 200, 200},
 		// 	OMECORE.Color{0, 0, 0, 1},
 		// )
+		OMECORE.render_texture(
+			app.renderer,
+			atlas,
+			"panel",
+			OMECORE.Rect{0, 0, 64, 64},
+			OMECORE.Color{255, 255, 255, 255},
+			// OMECORE.RectOffset{16, 16, 16, 16},
+		)
 		// OMECORE.render_texture(
 		// 	app.renderer,
-		// 	"transparent4",
-		// 	OMECORE.Rect{0, 0, f32(size), f32(size)},
-		// 	OMECORE.Color{1, 1, 1, 1},
-		// 	// OMECORE.RectOffset{16, 16, 16, 16},
+		// 	h,
+		// 	OMECORE.Rect{100, 100, 100, 100},
+		// 	OMECORE.Color{255, 255, 255, 255},
 		// )
-		// render_texture(app, h, Rect{100, 100, 100, 100}, Color{1, 1, 1, 1})
 		// render_rect(app, Rect{200, 200, 100, 100}, Color{1, 0, 1, 1})
 
 

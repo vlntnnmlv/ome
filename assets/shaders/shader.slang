@@ -12,10 +12,11 @@ static const int MAX_SPRITES = 256;
 //   offset 44  tex_id   : u32
 //   size 48, align 4
 //
-// Fields are declared as loose scalars ON PURPOSE. Slang has no `packed_float4`,
-// so a `float4 position` member would force 16-byte alignment in the emitted MSL
-// and push `color` to offset 32 / the stride to 64 — silently misreading every
-// vertex after the first. All-scalar members keep align 4 and stride 48.
+// Fields are declared as loose scalars ON PURPOSE. Slang has no
+// `packed_float4`, so a `float4 position` member would force 16-byte alignment
+// in the emitted MSL and push `color` to offset 32 / the stride to 64 —
+// silently misreading every vertex after the first. All-scalar members keep
+// align 4 and stride 48.
 struct VertexIn {
   float px, py, pz, pw; // position
   float u, v;           // uv
@@ -46,8 +47,8 @@ ParameterBlock<SpriteTable> sprites : register(b0);
 // it too even though it never reads it.
 StructuredBuffer<VertexIn> vertices : register(t1);
 
-Texture2D<float4> font_tex;  // texture(0)
-SamplerState font_samp;      // sampler(0)
+Texture2D<float4> font_tex; // texture(0)
+SamplerState font_samp;     // sampler(0)
 
 [shader("vertex")]
 VertexOut vertex_main(uint vid: SV_VertexID) {

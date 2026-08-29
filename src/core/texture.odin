@@ -70,12 +70,7 @@ texture_manager_rebuild :: proc(texture_manager: ^TextureManager) {
 	texture_manager.encoder->setSamplerState(texture_manager.sampler, MAX_TEXTURES)
 }
 
-texture_create :: proc(
-	app: ^App,
-	texture_manager: ^TextureManager,
-	path: string,
-	name: string,
-) -> TextureHandle {
+texture_create :: proc(renderer: ^Renderer, path: string, name: string) -> TextureHandle {
 	w, h, channels: i32
 
 	pixels := STBI.load(
@@ -96,14 +91,10 @@ texture_create :: proc(
 		name     = name,
 	}
 
-	return texture_create_from_data(app, texture_manager, texture_data)
+	return texture_create_from_data(renderer, texture_data)
 }
 
-texture_create_from_data :: proc(
-	app: ^App,
-	texture_manager: ^TextureManager,
-	texture_data: TextureData,
-) -> TextureHandle {
+texture_create_from_data :: proc(renderer: ^Renderer, texture_data: TextureData) -> TextureHandle {
 	desc := MTL.TextureDescriptor.texture2DDescriptorWithPixelFormat(
 		.RGBA8Unorm_sRGB,
 		cast(NS.UInteger)texture_data.w,
@@ -113,18 +104,18 @@ texture_create_from_data :: proc(
 	desc->setStorageMode(.Shared)
 	desc->setUsage({.ShaderRead})
 
-	texture := app.renderer.device->newTextureWithDescriptor(desc)
+	texture := renderer.device->newTextureWithDescriptor(desc)
 	region := MTL.Region {
 		origin = {0, 0, 0},
 		size   = {cast(NS.Integer)texture_data.w, cast(NS.Integer)texture_data.h, 1},
 	}
 	texture->replaceRegion(region, 0, texture_data.pixels, cast(NS.UInteger)texture_data.w * 4)
 
-	append(&texture_manager.textures, texture)
-	texture_manager_rebuild(texture_manager)
+	append(&renderer.texture_manager.textures, texture)
+	texture_manager_rebuild(renderer.texture_manager)
 
-	handle := TextureHandle(len(texture_manager.textures) - 1)
-	append(&texture_manager.texture_names, texture_data.name)
+	handle := TextureHandle(len(renderer.texture_manager.textures) - 1)
+	append(&renderer.texture_manager.texture_names, texture_data.name)
 	return handle
 }
 

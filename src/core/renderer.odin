@@ -1,5 +1,7 @@
 package ome
 
+import "core:fmt"
+// import "core:fmt"
 import "core:log"
 import "core:os"
 import "core:slice"
@@ -371,6 +373,7 @@ render_text :: proc(
 render_texture :: proc {
 	render_texture_by_handle,
 	render_texture_by_name,
+	render_texture_by_atlas_name,
 }
 
 render_texture_by_handle :: proc(
@@ -380,7 +383,22 @@ render_texture_by_handle :: proc(
 	color: Maybe(Color) = nil,
 	slice_offset: Maybe(RectOffset) = nil,
 ) {
-	graphics_add_texture(renderer, handle, rect, resolve_color(color), slice_offset)
+	positions: [dynamic]Position
+	uvs: [dynamic]Uv
+
+	if rslice_offset, ok := slice_offset.?; ok {
+		tex := renderer.texture_manager.textures[handle]
+		tw := cast(f32)tex->width()
+		th := cast(f32)tex->height()
+
+		positions = rect_to_vertices_nine_slice(renderer.logical_size, rect, rslice_offset)
+		uvs = offset_to_uvs_nine_slice(rslice_offset, tw, th)
+	} else {
+		positions = rect_to_vertices_positions(renderer.logical_size, rect)
+		uvs = rect_to_uvs({0, 0, 1, 1})
+	}
+
+	graphics_add_texture(renderer, handle, positions[:], uvs[:], resolve_color(color))
 }
 
 render_texture_by_name :: proc(
@@ -396,7 +414,58 @@ render_texture_by_name :: proc(
 	}
 
 	handle := TextureHandle(i)
-	graphics_add_texture(renderer, handle, rect, resolve_color(color), slice_offset)
+
+	positions: [dynamic]Position
+	uvs: [dynamic]Uv
+
+	if rslice_offset, ok := slice_offset.?; ok {
+		tex := renderer.texture_manager.textures[handle]
+		tw := cast(f32)tex->width()
+		th := cast(f32)tex->height()
+
+		positions = rect_to_vertices_nine_slice(renderer.logical_size, rect, rslice_offset)
+		uvs = offset_to_uvs_nine_slice(rslice_offset, tw, th)
+	} else {
+		positions = rect_to_vertices_positions(renderer.logical_size, rect)
+		uvs = rect_to_uvs({0, 0, 1, 1})
+	}
+
+	graphics_add_texture(renderer, handle, positions[:], uvs[:], resolve_color(color))
+}
+
+render_texture_by_atlas_name :: proc(
+	renderer: ^Renderer,
+	atlas: SpriteAtlas,
+	name: string,
+	rect: Rect,
+	color: Maybe(Color) = nil,
+	slice_offset: Maybe(RectOffset) = nil,
+) {
+	handle := atlas.handle
+
+	// for sprite_name, sprite in atlas.sprites {
+	// 	// fmt.println("sprite:", sprite_name, sprite.uvs, sprite.x, sprite.y, sprite.h, sprite.w)
+	// }
+
+	positions: [dynamic]Position
+	uvs: [dynamic]Uv
+
+	sprite: SpriteData = atlas.sprites[name]
+
+	if rslice_offset, ok := slice_offset.?; ok {
+		tex := renderer.texture_manager.textures[handle]
+		tw := cast(f32)tex->width()
+		th := cast(f32)tex->height()
+
+		positions = rect_to_vertices_nine_slice(renderer.logical_size, rect, rslice_offset)
+		uvs = offset_to_uvs_nine_slice(rslice_offset, tw, th)
+	} else {
+		positions = rect_to_vertices_positions(renderer.logical_size, rect)
+		// uvs = sprite.uvs //rect_to_uvs_atlas({sprite.x, sprite.y, sprite.w, sprite.h}, {atlas.size, atlas.size})
+	}
+
+	fmt.println(sprite.uvs)
+	graphics_add_texture(renderer, handle, positions[:], sprite.uvs[:], resolve_color(color))
 }
 
 renderer_resize :: proc(
