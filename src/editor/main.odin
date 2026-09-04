@@ -3,8 +3,6 @@ package omeeditor
 import "base:runtime"
 import "core:fmt"
 import "core:log"
-import "core:math"
-// import "core:math"
 import "core:mem"
 
 import OMECORE "../core"
@@ -31,9 +29,7 @@ main :: proc() {
 	tracked_allocator, tracking_allocator := track_start(context.allocator)
 	context.allocator = tracked_allocator
 
-	defer {
-		track_finish(tracking_allocator)
-	}
+	defer track_finish(tracking_allocator)
 
 	opts: bit_set[runtime.Logger_Option] = {.Level}
 	context.logger = log.create_console_logger(opt = opts)
@@ -52,103 +48,29 @@ main :: proc() {
 	atlas := OMECORE.sprite_atlas_create(app.renderer, "assets/textures/", "main_atlas")
 	defer OMECORE.sprite_atlas_destroy(&atlas)
 
-	size: i32 = 128
-	pixels: [dynamic]byte = make([dynamic]byte, 0, size * size * 4)
-	defer delete(pixels)
-	for i in 0 ..< size * size {
-		x := i % size - size / 2
-		y := i / size - size / 2
-		if x * y > 0 do append(&pixels, 0, 0, 0, 255)
-		if x * y <= 0 do append(&pixels, 252, 3, 236, 255)
-	}
+	// create UI
+	ui_manager: OMECORE.UIManager = OMECORE.ui_manager_create(OMECORE.Rect{0, 0, width, height})
+	defer OMECORE.ui_manager_delete(&ui_manager)
 
-	td := OMECORE.TextureData {
-		pixels   = raw_data(pixels),
-		w        = size,
-		h        = size,
-		channels = 4,
-		in_atlas = false,
-		name     = "transparent",
-	}
-	OMECORE.texture_create_from_data(app.renderer, td)
-	// setup user inut
-	// app.key_callbacks[SDL.K_W] = proc(app: ^App) {rect.y += app.dt * 100}
-
-	// build ui
-	// OMECORE.app_init_ui(app)
-
-	point_a := [2]f32{0, 0}
-	point_b := [2]f32{100, 400}
-	point_c := [2]f32{200, 300}
-	point_d := [2]f32{150, 100}
+	p := OMECORE.ui_manager_create_panel(
+		&ui_manager,
+		OMECORE.Rect{10, 10, 200, 200},
+		0,
+		OMECORE.UIImageSpec {
+			texture_handle = atlas.handle,
+			color = OMECORE.Color{255, 255, 255, 255},
+		},
+	)
+	OMECORE.ui_manager_create_panel(&ui_manager, OMECORE.Rect{5, 5, 20, 20}, p)
+	// OMECORE.ui_manager_create_panel(&ui_manager, OMECORE.Rect{100, 100, 250, 1200})
 
 	// start the event loop
 	for !app.quit {
 		OMECORE.app_process_events(app)
 
-		point_a.x = (math.sin(app.time_manager.time) + 1) / 2 * width
-		point_b.x = (math.sin(app.time_manager.time * 2) + 1) / 2 * width
-		point_c.x = (math.sin(app.time_manager.time / 4) + 1) / 2 * width
-		point_d.x = (math.sin(app.time_manager.time * 10) + 1) / 2 * width
-
 		OMECORE.app_pre_render(app)
-		OMECORE.render_line(
-			app.renderer,
-			[2]f32{0, 0},
-			[2]f32{width, height},
-			OMECORE.Color{255, 0, 0, 255},
-			2,
-		)
-		OMECORE.render_segments(
-			app.renderer,
-			[][2]f32{point_a, point_b, point_c, point_d},
-			OMECORE.Color{255, 255, 0, 255},
-		)
-		OMECORE.render_text(
-			app.renderer,
-			fmt.tprintf("%.2f", app.time_manager.fps),
-			256,
-			OMECORE.Rect{300, 300, 200, 200},
-			OMECORE.Color{0, 0, 0, 255},
-		)
-		// OMECORE.render_text(
-		// 	app.renderer,
-		// 	fmt.tprintf("%.2f", app.time_manager.time),
-		// 	256,
-		// 	OMECORE.Rect{700, 300, 200, 200},
-		// 	OMECORE.Color{0, 0, 0, 1},
-		// )
 
-		// OMECORE.render_text(
-		// 	app.renderer,
-		// 	fmt.tprintf("%.5f", app.time_manager.dt),
-		// 	256,
-		// 	OMECORE.Rect{500, 300, 200, 200},
-		// 	OMECORE.Color{0, 0, 0, 1},
-		// )
-		OMECORE.render_texture(
-			app.renderer,
-			atlas,
-			"panel",
-			OMECORE.Rect{0, 0, 512, 512},
-			OMECORE.Color{255, 255, 255, 255},
-			OMECORE.RectOffset{2, 2, 2, 2},
-		)
-		// OMECORE.render_texture(
-		// 	app.renderer,
-		// 	h,
-		// 	OMECORE.Rect{100, 100, 100, 100},
-		// 	OMECORE.Color{255, 255, 255, 255},
-		// )
-		// render_rect(app, Rect{200, 200, 100, 100}, Color{1, 0, 1, 1})
-
-
-		// OMECORE.render_curve(
-		// 	app.renderer,
-		// 	{{25, 35}, {500, 500}, {1000, 100}},
-		// 	OMECORE.Color{255, 0, 0, 255},
-		// 	2,
-		// )
+		OMECORE.ui_manager_render(&ui_manager, app.renderer)
 
 		OMECORE.app_render(app)
 		OMECORE.app_submit(app)

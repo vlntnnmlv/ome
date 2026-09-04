@@ -337,25 +337,27 @@ render_curve :: proc(
 }
 
 
-// render_circle :: proc(
-// 	renderer: ^Renderer,
-// 	center: [2]f32,
-// 	radius: f32,
-// 	color: Maybe(Color) = nil,
-// 	thickness: int = 1,
-// 	fill: bool = false,
-// ) {
-// 	left: [2]f32 = center - { radius, 0}
-// 	lefttop [2]
-// 	top: [2]f32 = center + { radius, radius}
-// 	right: [2]f32 = center + { radius, radius}
-// 	bottom: [2]f32 = center + { radius, radius}
-
-// 	render_curve(renderer, , color, thickness, fill)
-// 	render_curve(renderer, , color, thickness, fill)
-// 	render_curve(renderer, , color, thickness, fill)
-// 	render_curve(renderer, , color, thickness, fill)
-// }
+render_quad :: proc(
+	renderer: ^Renderer,
+	rect: Rect,
+	color: Maybe(Color) = nil,
+	thickness: int = 1,
+	fill: bool = false,
+) {
+	render_segments(
+		renderer,
+		{
+			{rect.x, rect.y},
+			{rect.x + rect.w, rect.y},
+			{rect.x + rect.w, rect.y + rect.h},
+			{rect.x, rect.y + rect.h},
+			{rect.x, rect.y},
+		},
+		color,
+		thickness,
+		fill,
+	)
+}
 
 render_rect :: proc(renderer: ^Renderer, rect: Rect, color: Maybe(Color) = nil) {
 	graphics_add_quad(renderer, rect, resolve_color(color))

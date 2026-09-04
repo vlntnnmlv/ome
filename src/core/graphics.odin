@@ -1,6 +1,5 @@
 package ome
 
-
 import MTL "vendor:darwin/Metal"
 import STBTT "vendor:stb/truetype"
 
@@ -13,6 +12,12 @@ Mode :: enum u32 {
 Position :: distinct [4]f32
 Uv :: distinct [2]f32
 TexID :: distinct u32
+Rect :: struct {
+	x, y, w, h: f32,
+}
+RectOffset :: struct {
+	left, right, top, bottom: f32,
+}
 
 Vertex2D :: struct {
 	position: Position,

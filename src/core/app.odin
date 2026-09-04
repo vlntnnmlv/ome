@@ -20,7 +20,6 @@ App :: struct {
 	key_callbacks: map[u64]KeyCallback,
 	quit:          bool,
 	time_manager:  TimeManager,
-	ui_context:    UIContext,
 }
 
 KeyCallback :: proc(ctx: ^App)
@@ -84,17 +83,6 @@ app_create :: proc(
 	return app, true
 }
 
-app_init_ui :: proc(app: ^App) {
-	ui_context_init(&app.ui_context)
-	app.ui_context.root_handle = ui_create_panel(
-		&app.ui_context,
-		nil,
-		Rect{0, 0, cast(f32)app.window_info.pixel_width, cast(f32)app.window_info.pixel_height},
-		{.Fill, 0, .Fill, 0},
-		TRANSPARENT_COLOR,
-	)
-}
-
 app_process_events :: proc(app: ^App) {
 	time_manager_capture_frame_start(&app.time_manager)
 
@@ -151,8 +139,6 @@ app_submit :: proc(app: ^App) {
 }
 
 app_close :: proc(app: ^App) {
-	ui_context_free(&app.ui_context)
-
 	renderer_delete(app.renderer)
 	free(app.renderer)
 
