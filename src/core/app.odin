@@ -83,10 +83,12 @@ app_create :: proc(
 	return app, true
 }
 
-app_process_events :: proc(app: ^App) {
+app_process_events :: proc(app: ^App, ui_manager: ^UIManager) {
 	time_manager_capture_frame_start(&app.time_manager)
 
 	for e: SDL.Event; SDL.PollEvent(&e); {
+		ui_manager_process_event(ui_manager, e)
+
 		#partial switch e.type {
 		case .QUIT:
 			app.quit = true

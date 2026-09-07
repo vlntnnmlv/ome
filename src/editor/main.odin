@@ -66,7 +66,7 @@ main :: proc() {
 
 	// start the event loop
 	for !app.quit {
-		OMECORE.app_process_events(app)
+		OMECORE.app_process_events(app, &ui_manager)
 
 		OMECORE.app_pre_render(app)
 

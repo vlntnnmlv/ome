@@ -1,5 +1,7 @@
 package ome
 
+import SDL "vendor:sdl3"
+
 UIPanelHandle :: distinct i32
 ROOT_HANDLE: UIPanelHandle : 0
 EMPTY_HANDLE: UIPanelHandle : -1
@@ -32,12 +34,19 @@ UIPanel :: struct {
 	spec:     UISpec,
 	children: [dynamic]UIPanelHandle,
 	parent:   UIPanelHandle,
+	hovered:  bool,
 }
 
 UIManager :: struct {
 	panels:      [dynamic]UIPanel,
 	root_handle: UIPanelHandle,
 	next_handle: UIPanelHandle,
+}
+
+ui_manager_get_new_handle :: proc(ui_manager: ^UIManager) -> UIPanelHandle {
+	handle := ui_manager.next_handle
+	ui_manager.next_handle += 1
+	return handle
 }
 
 ui_manager_create :: proc(rect: Rect) -> UIManager {
@@ -61,7 +70,20 @@ ui_manager_create :: proc(rect: Rect) -> UIManager {
 }
 
 ui_manager_delete :: proc(ui_manager: ^UIManager) {
+	ui_panel_delete(ui_manager, ui_manager.panels[ui_manager.root_handle])
 	delete(ui_manager.panels)
+}
+
+ui_panel_delete :: proc(ui_manager: ^UIManager, ui_panel: UIPanel) {
+	for child in ui_panel.children {
+		ui_panel_delete(ui_manager, ui_manager.panels[child])
+	}
+
+	delete(ui_panel.children)
+}
+
+ui_manager_process_event :: proc(ui_manager: ^UIManager, e: SDL.Event) {
+	ui_panel_process_event(ui_manager.root_handle, ui_manager, e)
 }
 
 ui_manager_create_panel :: proc(
@@ -77,19 +99,34 @@ ui_manager_create_panel :: proc(
 	}
 
 	ui_panel := UIPanel {
-		handle   = ui_manager.next_handle,
+		handle   = ui_manager_get_new_handle(ui_manager),
 		rect     = world_rect,
 		children = make([dynamic]UIPanelHandle),
 		parent   = parent,
 		spec     = spec,
 	}
 
-	ui_manager.next_handle += 1
-
 	append(&ui_manager.panels, ui_panel)
 	append(&ui_manager.panels[parent].children, ui_panel.handle)
 
 	return ui_panel.handle
+}
+
+ui_panel_process_event :: proc(
+	ui_panel_handle: UIPanelHandle,
+	ui_manager: ^UIManager,
+	e: SDL.Event,
+) -> bool {
+	if e.type != .MOUSE_MOTION do return false
+
+	panel := &ui_manager.panels[ui_panel_handle]
+	child_catched := false
+	for child in panel.children {
+		child_catched = ui_panel_process_event(child, ui_manager, e)
+	}
+
+	panel.hovered = !child_catched && contains(panel.rect, {e.motion.x, e.motion.y})
+	return panel.hovered
 }
 
 ui_panel_render :: proc(
@@ -98,7 +135,10 @@ ui_panel_render :: proc(
 	ui_panel_handle: UIPanelHandle,
 ) {
 	panel := ui_manager.panels[ui_panel_handle]
-	render_quad(renderer, panel.rect, Color{255, 0, 0, 255}, 1, false)
+	color := Color{255, 0, 0, 255}
+	if panel.hovered do color = Color{0, 255, 0, 255}
+
+	render_quad(renderer, panel.rect, color, 1, false)
 	switch spec in panel.spec {
 	case UIPanelSpec:
 		break

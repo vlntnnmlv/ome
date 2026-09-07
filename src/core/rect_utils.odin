@@ -8,3 +8,12 @@ shrink :: proc(rect: Rect, rect_offset: RectOffset) -> Rect {
 		rect.h - rect_offset.bottom - rect_offset.top,
 	}
 }
+
+contains :: proc(rect: Rect, position: [2]f32) -> bool {
+	return(
+		position.x >= rect.x &&
+		position.x <= rect.x + rect.w &&
+		position.y >= rect.y &&
+		position.y <= rect.y + rect.h \
+	)
+}

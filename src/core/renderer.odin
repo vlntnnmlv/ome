@@ -11,6 +11,8 @@ import CA "vendor:darwin/QuartzCore"
 
 import SDL "vendor:sdl3"
 
+MAX_CAMERAS: u32 : 4
+
 FrameContext :: struct {
 	pool:           ^NS.AutoreleasePool,
 	drawable:       ^CA.MetalDrawable,
@@ -19,9 +21,10 @@ FrameContext :: struct {
 }
 
 RenderCall :: struct {
-	type:  MTL.PrimitiveType,
-	start: int,
-	count: int,
+	type:   MTL.PrimitiveType,
+	start:  int,
+	count:  int,
+	camera: u32,
 }
 
 Renderer :: struct {
@@ -32,6 +35,8 @@ Renderer :: struct {
 	swapchain:            ^CA.MetalLayer,
 	render_calls:         [dynamic]RenderCall,
 	clear_color:          MTL.ClearColor,
+	cameras:              [MAX_CAMERAS]Camera2D,
+	active_camera:        u32,
 	texture_manager:      ^TextureManager,
 	font:                 Font,
 	logical_size:         [2]int,
@@ -191,6 +196,16 @@ renderer_create :: proc(
 	renderer.logical_size = {window_info.logical_width, window_info.logical_height}
 	renderer.vertices = gpu_buffer_create(Vertex2D, renderer.device)
 
+	renderer.cameras[0] = camera_create(renderer.logical_size)
+
+	// log.infof("%v", camera_get_view_projection(renderer.cameras[0]))
+
+	// TODO: This is just a placehodler
+	for i in 1 ..< MAX_CAMERAS {
+		renderer.cameras[i] = renderer.cameras[0]
+	}
+	renderer.active_camera = 0
+
 	renderer.clear_color = MTL.ClearColor {
 		clear_color.r,
 		clear_color.g,
@@ -311,10 +326,6 @@ render_segments :: proc(
 	fill: bool = false,
 ) {
 	graphics_add_points(renderer, points, resolve_color(color), fill, thickness)
-}
-
-interpolate :: proc(a: [2]f32, b: [2]f32, phase: f32) -> [2]f32 {
-	return {a.x + (b.x - a.x) * phase, a.y + (b.y - a.y) * phase}
 }
 
 render_curve :: proc(
@@ -473,6 +484,8 @@ renderer_resize :: proc(
 	logical_width, logical_height, pixel_width, pixel_height: int,
 ) {
 	renderer.logical_size = {logical_width, logical_height}
+	renderer.cameras[0] = camera_create(renderer.logical_size)
+
 	renderer.swapchain->setDrawableSize(
 		NS.Size{cast(NS.Float)pixel_width, cast(NS.Float)pixel_height},
 	)

@@ -29,7 +29,7 @@ sprite_atlas_create_from_directory :: proc(
 	directory_path: string,
 	atlas_name: string,
 ) -> SpriteAtlas {
-	names: []string = get_texture_paths_in_derectory(directory_path)
+	names: []string = get_file_paths_in_directory(directory_path)
 
 	defer {
 		for name in names do delete(name)

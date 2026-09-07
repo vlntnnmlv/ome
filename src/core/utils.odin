@@ -4,7 +4,7 @@ import "core:fmt"
 import "core:os"
 import "core:strings"
 
-get_texture_paths_in_derectory :: proc(path: string) -> []string {
+get_file_paths_in_directory :: proc(path: string) -> []string {
 	dir, open_err := os.open(path)
 	assert(open_err == os.ERROR_NONE, fmt.tprintln("Couldn't open directory: ", path))
 	defer os.close(dir)
