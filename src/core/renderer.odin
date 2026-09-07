@@ -49,6 +49,7 @@ Renderer :: struct {
 	frame_complete_block: ^NS.Block,
 }
 
+@(private = "file")
 shader_compile_slang :: proc(
 	path: string,
 	allocator := context.temp_allocator,
@@ -224,6 +225,11 @@ renderer_create :: proc(
 	return renderer, true
 }
 
+renderer_set_camera :: proc(renderer: ^Renderer, index: u32) {
+	assert(index < MAX_CAMERAS)
+	renderer.active_camera = index
+}
+
 renderer_begin :: proc(renderer: ^Renderer) {
 	renderer_wait_on_frame_complete(renderer)
 
@@ -248,6 +254,7 @@ renderer_begin :: proc(renderer: ^Renderer) {
 	gpu_buffer_clear(&renderer.vertices)
 
 	clear(&renderer.render_calls)
+	renderer.active_camera = 0
 }
 
 renderer_flush :: proc(renderer: ^Renderer) {
@@ -274,7 +281,15 @@ renderer_flush :: proc(renderer: ^Renderer) {
 		)
 	}
 
+	last_camera: u32 = max(u32)
 	for render_call in renderer.render_calls {
+		if render_call.camera != last_camera {
+			view_projection := camera_get_view_projection(renderer.cameras[render_call.camera])
+			renderer.frame_context.encoder->setVertexBytes(
+				slice.bytes_from_ptr(&view_projection, size_of(view_projection)),
+				2,
+			)
+		}
 		renderer.frame_context.encoder->drawPrimitivesWithInstanceCount(
 			render_call.type,
 			cast(NS.UInteger)render_call.start,
@@ -405,10 +420,10 @@ render_texture_by_handle :: proc(
 		tw := cast(f32)tex->width()
 		th := cast(f32)tex->height()
 
-		positions = rect_to_vertices_nine_slice(renderer.logical_size, rect, rslice_offset)
+		positions = rect_to_vertices_nine_slice(rect, rslice_offset)
 		uvs = offset_to_uvs_nine_slice(rslice_offset, tw, th)
 	} else {
-		positions = rect_to_vertices_positions(renderer.logical_size, rect)
+		positions = rect_to_vertices_positions(rect)
 		uvs = rect_to_uvs({0, 0, 1, 1})
 	}
 
@@ -437,10 +452,10 @@ render_texture_by_name :: proc(
 		tw := cast(f32)tex->width()
 		th := cast(f32)tex->height()
 
-		positions = rect_to_vertices_nine_slice(renderer.logical_size, rect, rslice_offset)
+		positions = rect_to_vertices_nine_slice(rect, rslice_offset)
 		uvs = offset_to_uvs_nine_slice(rslice_offset, tw, th)
 	} else {
-		positions = rect_to_vertices_positions(renderer.logical_size, rect)
+		positions = rect_to_vertices_positions(rect)
 		uvs = rect_to_uvs({0, 0, 1, 1})
 	}
 
@@ -465,14 +480,14 @@ render_texture_by_atlas_name :: proc(
 	if rslice_offset, ok := slice_offset.?; ok {
 		// tex := renderer.texture_manager.textures[handle]
 
-		positions = rect_to_vertices_nine_slice(renderer.logical_size, rect, rslice_offset)
+		positions = rect_to_vertices_nine_slice(rect, rslice_offset)
 		uvs = rect_to_uvs_nine_slice_atlas(
 			rslice_offset,
 			sprite.atlas_rect,
 			{atlas.size, atlas.size},
 		)[:]
 	} else {
-		positions = rect_to_vertices_positions(renderer.logical_size, rect)
+		positions = rect_to_vertices_positions(rect)
 		uvs = sprite.uvs
 	}
 

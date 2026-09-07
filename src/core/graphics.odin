@@ -34,10 +34,16 @@ graphics_append_render_call :: proc(
 ) {
 	mergable := type == .Point || type == .Line || type == .Triangle
 	n := len(renderer.render_calls)
-	if n > 0 && mergable && renderer.render_calls[n - 1].type == type {
+	if n > 0 &&
+	   mergable &&
+	   renderer.render_calls[n - 1].type == type &&
+	   renderer.render_calls[n - 1].camera == renderer.active_camera {
 		renderer.render_calls[n - 1].count += count
 	} else {
-		append(&renderer.render_calls, RenderCall{type = type, start = start, count = count})
+		append(
+			&renderer.render_calls,
+			RenderCall{type = type, start = start, count = count, camera = renderer.active_camera},
+		)
 	}
 }
 
@@ -52,13 +58,9 @@ graphics_add_points :: proc(
 	positions: [dynamic]Position
 
 	if thickness > 1 {
-		positions = points_to_vertices_positions_thickness(
-			renderer.logical_size,
-			points,
-			thickness,
-		)
+		positions = points_to_vertices_positions_thickness(points, thickness)
 	} else {
-		positions = points_to_vertices_positions(renderer.logical_size, points)
+		positions = points_to_vertices_positions(points)
 	}
 
 	vertices: []Vertex2D = vertices_positions_to_vertices(positions[:], color)
@@ -71,7 +73,7 @@ graphics_add_points :: proc(
 
 graphics_add_quad :: proc(renderer: ^Renderer, rect: Rect, color: Color) {
 	start := len(renderer.vertices.cpu)
-	positions := rect_to_vertices_positions(renderer.logical_size, rect)
+	positions := rect_to_vertices_positions(rect)
 
 	vertices := vertices_positions_to_vertices(positions[:], color)
 
@@ -113,7 +115,7 @@ graphics_add_text :: proc(
 		)
 
 		char_rect := Rect{quad.x0, quad.y0, quad.x1 - quad.x0, quad.y1 - quad.y0}
-		vertices := rect_to_vertices_positions(renderer.logical_size, char_rect)
+		vertices := rect_to_vertices_positions(char_rect)
 
 		uvs := [VERTICES_PER_QUAD]Uv {
 			{quad.s0, quad.t0},

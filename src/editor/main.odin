@@ -5,6 +5,8 @@ import "core:fmt"
 import "core:log"
 import "core:mem"
 
+import SDL "vendor:sdl3"
+
 import OMECORE "../core"
 
 track_start :: proc(allocator: mem.Allocator) -> (mem.Allocator, ^mem.Tracking_Allocator) {
@@ -64,12 +66,20 @@ main :: proc() {
 	OMECORE.ui_manager_create_panel(&ui_manager, OMECORE.Rect{5, 5, 20, 20}, p)
 	// OMECORE.ui_manager_create_panel(&ui_manager, OMECORE.Rect{100, 100, 250, 1200})
 
+	app.renderer.cameras[1].zoom = 1
+
+	app.key_callbacks[SDL.K_V] = proc(ctx: ^OMECORE.App) {ctx.renderer.cameras[1].zoom += 0.1}
+	app.key_callbacks[SDL.K_C] = proc(ctx: ^OMECORE.App) {ctx.renderer.cameras[1].zoom -= 0.1}
+
 	// start the event loop
 	for !app.quit {
 		OMECORE.app_process_events(app, &ui_manager)
 
 		OMECORE.app_pre_render(app)
 
+		OMECORE.renderer_set_camera(app.renderer, 1)
+		OMECORE.render_quad(app.renderer, {400, 400, 30, 30}, OMECORE.Color{244, 244, 244, 255})
+		OMECORE.renderer_set_camera(app.renderer, 0)
 		OMECORE.ui_manager_render(&ui_manager, app.renderer)
 
 		OMECORE.app_render(app)

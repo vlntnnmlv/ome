@@ -33,6 +33,15 @@ struct VertexOut {
   nointerpolation uint tex_id : TEXID;
 };
 
+// Column-major float4x4 matching Odin `matrix[4,4]f32` byte-for-byte.
+// Slang emits `mul(M, v)` as MSL `v * M` over row-packed storage; the two
+// flips cancel, so the Odin matrix uploads raw. `mul(v, M)` would transpose
+// silently — argument order matters.
+struct CameraUniform {
+  float4x4 view_proj;
+};
+ConstantBuffer<CameraUniform> camera : register(b2);
+
 // argument buffer: 256 textures at ids 0..255, sampler at id 256.
 // Declared first so it takes Metal buffer(0) in BOTH stages, which is where the
 // Odin side binds `texture_manager.arguments`.
@@ -54,7 +63,7 @@ SamplerState font_samp;     // sampler(0)
 VertexOut vertex_main(uint vid: SV_VertexID) {
   VertexIn vin = vertices[vid];
   VertexOut o;
-  o.position = float4(vin.px, vin.py, vin.pz, vin.pw);
+  o.position = mul(camera.view_proj, float4(vin.px, vin.py, vin.pz, vin.pw));
   o.uv = float2(vin.u, vin.v);
   o.color = float4(vin.cr, vin.cg, vin.cb, vin.ca);
   o.mode = vin.mode;
