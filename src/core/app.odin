@@ -83,11 +83,11 @@ app_create :: proc(
 	return app, true
 }
 
-app_process_events :: proc(app: ^App, ui_manager: ^UIManager) {
+app_process_events :: proc(app: ^App) { 	// , ui_manager: ^UIManager) {
 	time_manager_capture_frame_start(&app.time_manager)
 
 	for e: SDL.Event; SDL.PollEvent(&e); {
-		ui_manager_process_event(ui_manager, e)
+		// ui_manager_process_event(ui_manager, e)
 
 		#partial switch e.type {
 		case .QUIT:
@@ -143,6 +143,7 @@ app_submit :: proc(app: ^App) {
 app_close :: proc(app: ^App) {
 	renderer_delete(app.renderer)
 	free(app.renderer)
+	delete_map(app.key_callbacks)
 
 	SDL.DestroyWindow(app.window)
 	SDL.Quit()

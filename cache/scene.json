@@ -1,0 +1,16 @@
+{
+	"handle": 0,
+	"name": "root",
+	"rect": {
+		"x": 0.00000000,
+		"y": 0.00000000,
+		"w": 1080.00000000,
+		"h": 720.00000000
+	},
+	"spec": null,
+	"children": [
+		1
+	],
+	"parent": -1,
+	"hovered": false
+}

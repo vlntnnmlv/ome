@@ -20,11 +20,16 @@ FrameContext :: struct {
 	encoder:        ^MTL.RenderCommandEncoder,
 }
 
-RenderCall :: struct {
-	type:   MTL.PrimitiveType,
-	start:  int,
-	count:  int,
+RenderState :: struct {
 	camera: u32,
+	cull:   MTL.CullMode,
+}
+
+RenderCall :: struct {
+	type:  MTL.PrimitiveType,
+	start: int,
+	count: int,
+	state: RenderState,
 }
 
 Renderer :: struct {
@@ -35,8 +40,8 @@ Renderer :: struct {
 	swapchain:            ^CA.MetalLayer,
 	render_calls:         [dynamic]RenderCall,
 	clear_color:          MTL.ClearColor,
-	cameras:              [MAX_CAMERAS]Camera2D,
-	active_camera:        u32,
+	cameras:              [MAX_CAMERAS]Camera,
+	active_state:         RenderState,
 	texture_manager:      ^TextureManager,
 	font:                 Font,
 	logical_size:         [2]int,
@@ -47,6 +52,18 @@ Renderer :: struct {
 	frame_slot_index:     int,
 	frame_sema:           sync.Sema,
 	frame_complete_block: ^NS.Block,
+}
+
+// Corner index bits are (x, y, z) against -h / +h:
+//   0(---) 1(+--) 2(++-) 3(-+-) 4(--+) 5(+-+) 6(+++) 7(-++)
+@(private = "file")
+CUBE_FACES := [6][4]int {
+	{4, 5, 6, 7}, // +Z
+	{0, 3, 2, 1}, // -Z
+	{1, 2, 6, 5}, // +X
+	{0, 4, 7, 3}, // -X
+	{7, 6, 2, 3}, // +Y
+	{0, 1, 5, 4}, // -Y
 }
 
 @(private = "file")
@@ -197,15 +214,16 @@ renderer_create :: proc(
 	renderer.logical_size = {window_info.logical_width, window_info.logical_height}
 	renderer.vertices = gpu_buffer_create(Vertex2D, renderer.device)
 
-	renderer.cameras[0] = camera_create(renderer.logical_size)
+	renderer.cameras[0] = camera2d_create(renderer.logical_size)
 
-	// log.infof("%v", camera_get_view_projection(renderer.cameras[0]))
-
-	// TODO: This is just a placehodler
 	for i in 1 ..< MAX_CAMERAS {
 		renderer.cameras[i] = renderer.cameras[0]
 	}
-	renderer.active_camera = 0
+
+	renderer.active_state = RenderState {
+		camera = 0,
+		cull   = .None,
+	}
 
 	renderer.clear_color = MTL.ClearColor {
 		clear_color.r,
@@ -227,7 +245,15 @@ renderer_create :: proc(
 
 renderer_set_camera :: proc(renderer: ^Renderer, index: u32) {
 	assert(index < MAX_CAMERAS)
-	renderer.active_camera = index
+	renderer.active_state.camera = index
+}
+
+renderer_get_camera_2d :: proc(renderer: ^Renderer, index: u32) -> ^Camera2D {
+	return &renderer.cameras[index].(Camera2D)
+}
+
+renderer_get_camera_3d :: proc(renderer: ^Renderer, index: u32) -> ^Camera3D {
+	return &renderer.cameras[index].(Camera3D)
 }
 
 renderer_begin :: proc(renderer: ^Renderer) {
@@ -254,13 +280,17 @@ renderer_begin :: proc(renderer: ^Renderer) {
 	gpu_buffer_clear(&renderer.vertices)
 
 	clear(&renderer.render_calls)
-	renderer.active_camera = 0
+	renderer.active_state = {
+		camera = 0,
+		cull   = .None,
+	}
 }
 
 renderer_flush :: proc(renderer: ^Renderer) {
 	gpu_buffer_submit(&renderer.vertices, renderer.frame_slot_index)
 
 	renderer.frame_context.encoder->setRenderPipelineState(renderer.pipeline_state)
+	renderer.frame_context.encoder->setFrontFacingWinding(.CounterClockwise)
 	renderer.frame_context.encoder->setVertexBuffer(
 		renderer.vertices.gpu_ring[renderer.frame_slot_index],
 		0,
@@ -281,15 +311,25 @@ renderer_flush :: proc(renderer: ^Renderer) {
 		)
 	}
 
-	last_camera: u32 = max(u32)
+	last_state: RenderState = {
+		camera = max(u32),
+		cull   = .None,
+	}
 	for render_call in renderer.render_calls {
-		if render_call.camera != last_camera {
-			view_projection := camera_get_view_projection(renderer.cameras[render_call.camera])
+		if render_call.state.camera != last_state.camera {
+			view_projection := camera_get_view_projection(
+				renderer.cameras[render_call.state.camera],
+			)
 			renderer.frame_context.encoder->setVertexBytes(
 				slice.bytes_from_ptr(&view_projection, size_of(view_projection)),
 				2,
 			)
 		}
+		if render_call.state.cull != last_state.cull {
+			renderer.frame_context.encoder->setCullMode(render_call.state.cull)
+		}
+
+		last_state = render_call.state
 		renderer.frame_context.encoder->drawPrimitivesWithInstanceCount(
 			render_call.type,
 			cast(NS.UInteger)render_call.start,
@@ -494,12 +534,47 @@ render_texture_by_atlas_name :: proc(
 	graphics_add_texture(renderer, handle, positions[:], uvs, resolve_color(color))
 }
 
+render_cube :: proc(renderer: ^Renderer, center: [3]f32, size: f32, color: Maybe(Color) = nil) {
+	h := size * 0.5
+	corners := [8][3]f32 {
+		{-h, -h, -h},
+		{h, -h, -h},
+		{h, h, -h},
+		{-h, h, -h},
+		{-h, -h, h},
+		{h, -h, h},
+		{h, h, h},
+		{-h, h, h},
+	}
+
+	positions := make([dynamic]Position, 0, 36, context.temp_allocator)
+	for face in CUBE_FACES {
+		quad: [4]Position
+		for corner_index, i in face {
+			p := corners[corner_index] + center
+			quad[i] = Position{p.x, p.y, p.z, 1}
+		}
+		append(&positions, quad[0], quad[1], quad[2], quad[0], quad[2], quad[3])
+	}
+
+	graphics_add_mesh(renderer, positions[:], resolve_color(color))
+}
+
 renderer_resize :: proc(
 	renderer: ^Renderer,
 	logical_width, logical_height, pixel_width, pixel_height: int,
 ) {
 	renderer.logical_size = {logical_width, logical_height}
-	renderer.cameras[0] = camera_create(renderer.logical_size)
+	for i in 0 ..< MAX_CAMERAS {
+		switch _ in renderer.cameras[i] {
+		case Camera2D:
+			renderer.cameras[i] = camera2d_create(renderer.logical_size)
+		case Camera3D:
+			c := &renderer.cameras[i].(Camera3D)
+			c.viewport.w = f32(logical_width)
+			c.viewport.h = f32(logical_height)
+		}
+	}
 
 	renderer.swapchain->setDrawableSize(
 		NS.Size{cast(NS.Float)pixel_width, cast(NS.Float)pixel_height},

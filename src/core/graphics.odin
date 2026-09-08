@@ -37,12 +37,12 @@ graphics_append_render_call :: proc(
 	if n > 0 &&
 	   mergable &&
 	   renderer.render_calls[n - 1].type == type &&
-	   renderer.render_calls[n - 1].camera == renderer.active_camera {
+	   renderer.render_calls[n - 1].state == renderer.active_state {
 		renderer.render_calls[n - 1].count += count
 	} else {
 		append(
 			&renderer.render_calls,
-			RenderCall{type = type, start = start, count = count, camera = renderer.active_camera},
+			RenderCall{type = type, start = start, count = count, state = renderer.active_state},
 		)
 	}
 }
@@ -175,4 +175,20 @@ graphics_add_texture :: proc(
 	gpu_buffer_append(&renderer.vertices, vertices)
 
 	graphics_append_render_call(renderer, .Triangle, start, len(vertices))
+}
+
+graphics_add_mesh :: proc(
+	renderer: ^Renderer,
+	positions: []Position,
+	color: Color,
+	cull: MTL.CullMode = .Back,
+) {
+	start := len(renderer.vertices.cpu)
+	vertices := vertices_positions_to_vertices(positions, color)
+	gpu_buffer_append(&renderer.vertices, vertices)
+
+	previous := renderer.active_state
+	renderer.active_state.cull = cull
+	graphics_append_render_call(renderer, .Triangle, start, len(vertices))
+	renderer.active_state = previous
 }

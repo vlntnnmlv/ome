@@ -3,6 +3,21 @@ package ome
 import "core:math"
 import "core:math/linalg"
 
+Camera :: union {
+	Camera3D,
+	Camera2D,
+}
+
+Camera3D :: struct {
+	position: [3]f32,
+	target:   [3]f32,
+	up:       [3]f32,
+	fov_y:    f32,
+	near:     f32,
+	far:      f32,
+	viewport: Rect,
+}
+
 Camera2D :: struct {
 	position: [2]f32,
 	zoom:     f32,
@@ -10,14 +25,25 @@ Camera2D :: struct {
 	viewport: Rect,
 }
 
-camera_create :: proc(logical_size: [2]int) -> Camera2D {
+camera2d_create :: proc(logical_size: [2]int) -> Camera2D {
 	w := f32(logical_size.x)
 	h := f32(logical_size.y)
 
 	return Camera2D{position = {w * 0.5, h * 0.5}, zoom = 1, rotation = 0, viewport = {0, 0, w, h}}
 }
 
-camera_get_view_projection :: proc(camera: Camera2D) -> matrix[4, 4]f32 {
+camera_get_view_projection :: proc(camera: Camera) -> matrix[4, 4]f32 {
+	switch c in camera {
+	case Camera2D:
+		return camera2d_get_view_projection(c)
+	case Camera3D:
+		return camera3d_get_view_projection(c)
+	}
+	return 1
+}
+
+@(private = "file")
+camera2d_get_view_projection :: proc(camera: Camera2D) -> matrix[4, 4]f32 {
 	w := camera.viewport.w
 	h := camera.viewport.h
 
@@ -31,7 +57,36 @@ camera_get_view_projection :: proc(camera: Camera2D) -> matrix[4, 4]f32 {
 	return proj * view
 }
 
-camera_screen_to_world :: proc(camera: Camera2D, screen_point: [2]f32) -> [2]f32 {
+@(private = "file")
+camera3d_get_view_projection :: proc(camera: Camera3D) -> matrix[4, 4]f32 {
+	f := linalg.normalize(camera.target - camera.position)
+	s := linalg.normalize(linalg.cross(f, camera.up))
+	u := linalg.cross(s, f)
+	e := camera.position
+
+	view := matrix[4, 4]f32{
+		s.x, s.y, s.z, -linalg.dot(s, e),
+		u.x, u.y, u.z, -linalg.dot(u, e),
+		-f.x, -f.y, -f.z, linalg.dot(f, e),
+		0, 0, 0, 1,
+	}
+
+	t := 1 / math.tan(camera.fov_y * 0.5)
+	a := camera.viewport.w / camera.viewport.h
+	n := camera.near
+	fa := camera.far
+
+	proj := matrix[4, 4]f32{
+		t / a, 0, 0, 0,
+		0, t, 0, 0,
+		0, 0, fa / (n - fa), fa * n / (n - fa),
+		0, 0, -1, 0,
+	}
+
+	return proj * view
+}
+
+camera2d_screen_to_world :: proc(camera: Camera2D, screen_point: [2]f32) -> [2]f32 {
 	p :=
 		screen_point -
 		{camera.viewport.x, camera.viewport.y} -
