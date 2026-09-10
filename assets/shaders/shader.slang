@@ -56,9 +56,6 @@ ParameterBlock<SpriteTable> sprites : register(b0);
 // it too even though it never reads it.
 StructuredBuffer<VertexIn> vertices : register(t1);
 
-Texture2D<float4> font_tex; // texture(0)
-SamplerState font_samp;     // sampler(0)
-
 [shader("vertex")]
 VertexOut vertex_main(uint vid: SV_VertexID) {
   VertexIn vin = vertices[vid];
@@ -74,8 +71,8 @@ VertexOut vertex_main(uint vid: SV_VertexID) {
 [shader("fragment")]
 float4 fragment_main(VertexOut vert) : SV_Target {
   if (vert.mode == 1u) {
-    float alpha = font_tex.Sample(font_samp, vert.uv).r;
-    return float4(vert.color.rgb, vert.color.a * alpha);
+    return sprites.textures[vert.tex_id].Sample(sprites.s, vert.uv).x *
+           vert.color;
   }
   if (vert.mode == 2u) {
     return sprites.textures[vert.tex_id].Sample(sprites.s, vert.uv) *

@@ -44,7 +44,7 @@ sprite_atlas_create_from_files :: proc(
 	paths: []string,
 	name: string,
 ) -> SpriteAtlas {
-	w, h, channels: i32
+	width, height, channels: i32
 	textures_data: [dynamic]TextureData
 	rects: [dynamic]STBR.Rect
 	sprites := make(map[string](SpriteData))
@@ -52,21 +52,21 @@ sprite_atlas_create_from_files :: proc(
 	for i in 0 ..< len(paths) {
 		cpath := strings.clone_to_cstring(paths[i])
 		defer delete(cpath)
-		pixels := STBI.load(cpath, &w, &h, &channels, 4)
+		pixels := STBI.load(cpath, &width, &height, &channels, 4)
 		rect: STBR.Rect = {
 			id = i32(i),
-			w  = STBR.Coord(w),
-			h  = STBR.Coord(h),
+			w  = STBR.Coord(width),
+			h  = STBR.Coord(height),
 		}
 		append(&rects, rect)
 
 		texture_data: TextureData = {
 			pixels = pixels,
-			w = w,
-			h = h,
+			width = width,
+			height = height,
 			channels = channels,
 			in_atlas = true,
-			atlas_rect = Rect{w = f32(w), h = f32(h)},
+			atlas_rect = Rect{w = f32(width), h = f32(height)},
 			name = strings.clone(filepath.stem(paths[i])),
 		}
 		append(&textures_data, texture_data)
@@ -109,8 +109,8 @@ sprite_atlas_create_from_files :: proc(
 
 	atlas_data: TextureData = {
 		pixels   = raw_data(make([]byte, atlas_size * atlas_size * 4)),
-		w        = atlas_size,
-		h        = atlas_size,
+		width    = atlas_size,
+		height   = atlas_size,
 		channels = 4,
 		name     = name,
 	}
@@ -139,13 +139,13 @@ sprite_atlas_build :: proc(
 		row_bytes := int(rect.w) * 4
 
 		for row in 0 ..< int(rect.h) {
-			dst_offset := ((int(rect.y) + row) * int(atlas_data.w) + int(rect.x)) * 4
+			dst_offset := ((int(rect.y) + row) * int(atlas_data.width) + int(rect.x)) * 4
 			src_offset := row * row_bytes
 			mem.copy(&atlas_data.pixels[dst_offset], &src[src_offset], row_bytes)
 		}
 	}
 
-	handle := texture_create_from_data(renderer, atlas_data)
+	handle := texture_create_from_data(renderer.texture_manager, atlas_data)
 
 	// STBI.write_png(
 	// 	"a.png",

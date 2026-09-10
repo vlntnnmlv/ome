@@ -43,9 +43,6 @@ Renderer :: struct {
 	cameras:              [MAX_CAMERAS]Camera,
 	active_state:         RenderState,
 	texture_manager:      ^TextureManager,
-	// font:                 Font,
-	font_texture:         ^MTL.Texture,
-	font_sampler:         ^MTL.SamplerState,
 	logical_size:         [2]int,
 	vertices:             GPUBuffer(Vertex2D),
 	frame_context:        FrameContext,
@@ -212,7 +209,6 @@ renderer_create :: proc(
 	renderer.command_q = command_q
 	renderer.pipeline_state = pipeline_state
 	renderer.render_calls = make([dynamic]RenderCall)
-	renderer.texture_manager = texture_manager_create()
 	renderer.logical_size = {window_info.logical_width, window_info.logical_height}
 	renderer.vertices = gpu_buffer_create(Vertex2D, renderer.device)
 
@@ -234,7 +230,7 @@ renderer_create :: proc(
 		clear_color.a,
 	}
 
-	texture_manager_init(renderer.texture_manager, renderer, fragment_program)
+	renderer.texture_manager = texture_manager_create(renderer.device, fragment_program)
 
 	sync.sema_post(&renderer.frame_sema, GPU_BUFFERS_RING_SIZE)
 	renderer.frame_complete_block, _ = NS.Block.createGlobal(
@@ -298,14 +294,6 @@ renderer_flush :: proc(renderer: ^Renderer) {
 		0,
 		1,
 	)
-
-	// SCAFFOLD
-	{
-		if renderer.font_texture != nil {
-			renderer.frame_context.encoder->setFragmentTexture(renderer.font_texture, 0)
-			renderer.frame_context.encoder->setFragmentSamplerState(renderer.font_sampler, 0)
-		}
-	}
 
 	renderer.frame_context.encoder->setFragmentBuffer(renderer.texture_manager.arguments, 0, 0)
 	if len(renderer.texture_manager.textures) > 0 {

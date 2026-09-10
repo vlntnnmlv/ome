@@ -66,8 +66,12 @@ main :: proc() {
 
 	// load assets
 	font: ^core.Font = new(core.Font)
-	defer free(font)
-	core.font_load(font, app.renderer.device, "assets/fonts/Iosevka.ttf", {32, 64})
+	defer {
+		core.font_delete(font)
+		free(font)
+	}
+
+	core.font_load(font, app.renderer.texture_manager, "assets/fonts/Iosevka.ttf", {32, 64})
 	atlas := core.sprite_atlas_create(app.renderer, "assets/textures/", "main_atlas")
 	defer core.sprite_atlas_destroy(&atlas)
 
@@ -121,6 +125,14 @@ main :: proc() {
 		core.renderer_set_camera(app.renderer, 0)
 
 		ui.scene_render(app.renderer, scene)
+		core.render_text(
+			app.renderer,
+			"HeLLO",
+			font,
+			32,
+			{100, 100, 500, 500},
+			core.Color{0, 0, 255, 255},
+		)
 
 		core.app_render(app)
 		core.app_submit(app)

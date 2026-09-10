@@ -5,8 +5,6 @@ import "core:path/filepath"
 import "core:slice"
 import "core:strings"
 
-import NS "core:sys/darwin/Foundation"
-import MTL "vendor:darwin/Metal"
 import STBI "vendor:stb/image"
 import STBTT "vendor:stb/truetype"
 
@@ -28,9 +26,7 @@ Font :: struct {
 	bitmap:      []u8,
 	sizes:       [dynamic]u32,
 	char_data:   map[u32][]STBTT.packedchar,
-	texture:     ^MTL.Texture,
-	// texture:     TextureHandle,
-	sampler:     ^MTL.SamplerState,
+	texture:     TextureHandle,
 }
 
 FontManager :: struct {
@@ -46,7 +42,7 @@ font_manager_create :: proc() -> ^FontManager {
 	return font_manager
 }
 
-font_load :: proc(font: ^Font, device: ^MTL.Device, path: string, sizes: []u32 = {}) {
+font_load :: proc(font: ^Font, texture_manager: ^TextureManager, path: string, sizes: []u32 = {}) {
 	font.path = path
 	font.bitmap_size = INITIAL_BITMAP_SIZE
 
@@ -58,38 +54,29 @@ font_load :: proc(font: ^Font, device: ^MTL.Device, path: string, sizes: []u32 =
 		append(&font.sizes, REFERENCE_FONT_SIZE)
 	}
 
-	font_pack(font, device)
+	font_pack(font, texture_manager)
 }
 
-font_pack :: proc(font: ^Font, device: ^MTL.Device) {
+font_pack :: proc(font: ^Font, texture_manager: ^TextureManager) {
 	for {
-		err := font_pack_internal(font, device)
+		err := font_pack_internal(font, texture_manager)
 		if err == .Packing_Error do font.bitmap_size *= 2
 		else do break
 	}
 }
 
-font_validate_size :: proc(font: ^Font, device: ^MTL.Device, size: u32) {
+font_validate_size :: proc(font: ^Font, texture_manager: ^TextureManager, size: u32) {
 	if !slice.contains(font.sizes[:], size) {
 		append(&font.sizes, size)
-		font_pack(font, device)
+		font_pack(font, texture_manager)
 	}
 }
 
-font_pack_internal :: proc(font: ^Font, device: ^MTL.Device) -> FontError {
+font_pack_internal :: proc(font: ^Font, texture_manager: ^TextureManager) -> FontError { 	//, device: ^MTL.Device)
 	font_data, err := os.read_entire_file_from_path(font.path, context.temp_allocator)
 	defer delete(font_data, context.temp_allocator)
 	if err != nil do return .File_Error
 
-	// clean exisiting font data
-	// if font.texture != nil {
-	// 	font.texture->release()
-	// 	font.texture = nil
-	// }
-	if font.sampler != nil {
-		font.sampler->release()
-		font.sampler = nil
-	}
 	if font.bitmap != nil do delete(font.bitmap)
 	if font.char_data != nil {
 		for _, &char_data in font.char_data do delete(char_data)
@@ -123,31 +110,26 @@ font_pack_internal :: proc(font: ^Font, device: ^MTL.Device) -> FontError {
 	}
 	STBTT.PackEnd(pack_context)
 
-	// bake to bitmap to metal texture
-	desc := MTL.TextureDescriptor.texture2DDescriptorWithPixelFormat(
-		.R8Unorm,
-		cast(NS.UInteger)font.bitmap_size,
-		cast(NS.UInteger)font.bitmap_size,
-		false,
+	font.texture = texture_create_from_data(
+		texture_manager,
+		TextureData {
+			name = "font",
+			pixels = raw_data(font.bitmap),
+			width = font.bitmap_size,
+			height = font.bitmap_size,
+			channels = 1,
+			in_atlas = false,
+			atlas_rect = Rect{},
+		},
+		TextureFormat{.R8Unorm, 1},
 	)
-	desc->setStorageMode(.Shared)
-	font.texture = device->newTextureWithDescriptor(desc)
-	region := MTL.Region {
-		origin = {0, 0, 0},
-		size   = {cast(NS.Integer)font.bitmap_size, cast(NS.Integer)font.bitmap_size, 1},
-	}
-	font.texture->replaceRegion(
-		region,
-		0,
-		raw_data(font.bitmap),
-		cast(NS.UInteger)font.bitmap_size,
-	)
-	samp_desc := NS.new(MTL.SamplerDescriptor)
-	samp_desc->setMinFilter(.Nearest)
-	samp_desc->setMagFilter(.Nearest)
-	samp_desc->setSAddressMode(.ClampToZero)
-	samp_desc->setTAddressMode(.ClampToZero)
-	font.sampler = device->newSamplerState(samp_desc)
+
+	// samp_desc := NS.new(MTL.SamplerDescriptor)
+	// samp_desc->setMinFilter(.Nearest)
+	// samp_desc->setMagFilter(.Nearest)
+	// samp_desc->setSAddressMode(.ClampToZero)
+	// samp_desc->setTAddressMode(.ClampToZero)
+	// font.sampler = texture_manager.device->newSamplerState(samp_desc)
 
 	// DEBUG: save bitmap to .png
 	filename := strings.concatenate(
@@ -179,6 +161,4 @@ font_delete :: proc(font: ^Font) {
 	delete(font.char_data)
 	delete(font.bitmap)
 	delete(font.sizes)
-	font.texture->release()
-	font.sampler->release()
 }

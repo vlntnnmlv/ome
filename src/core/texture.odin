@@ -15,14 +15,15 @@ Texture :: struct {
 TextureData :: struct {
 	name:       string,
 	pixels:     [^]byte,
-	w:          i32,
-	h:          i32,
+	width:      i32,
+	height:     i32,
 	channels:   i32,
 	in_atlas:   bool,
 	atlas_rect: Rect,
 }
 
 TextureManager :: struct {
+	device:        ^MTL.Device,
 	textures:      [dynamic]^MTL.Texture,
 	texture_names: [dynamic]string,
 	sampler:       ^MTL.SamplerState,
@@ -32,31 +33,30 @@ TextureManager :: struct {
 
 TextureHandle :: distinct u32
 
-texture_manager_create :: proc() -> ^TextureManager {
+texture_manager_create :: proc(
+	device: ^MTL.Device,
+	fragment_fn: ^MTL.Function,
+) -> ^TextureManager {
 	texture_manager := new(TextureManager)
 	texture_manager.textures = make([dynamic]^MTL.Texture)
 
-	return texture_manager
-}
-
-texture_manager_init :: proc(
-	texture_manager: ^TextureManager,
-	renderer: ^Renderer,
-	fragment_fn: ^MTL.Function,
-) {
 	samp_desc := NS.new(MTL.SamplerDescriptor)
 	samp_desc->setMinFilter(.Linear)
 	samp_desc->setMagFilter(.Linear)
 	samp_desc->setSupportArgumentBuffers(true)
 
-	texture_manager.sampler = renderer.device->newSamplerState(samp_desc)
+	texture_manager.device = device
+
+	texture_manager.sampler = device->newSamplerState(samp_desc)
 	texture_manager.encoder = fragment_fn->newArgumentEncoder(0)
-	texture_manager.arguments = renderer.device->newBufferWithLength(
+	texture_manager.arguments = device->newBufferWithLength(
 		texture_manager.encoder->encodedLength(),
 		MTL.ResourceStorageModeShared,
 	)
 
 	texture_manager_rebuild(texture_manager)
+
+	return texture_manager
 }
 
 texture_manager_rebuild :: proc(texture_manager: ^TextureManager) {
@@ -70,47 +70,66 @@ texture_manager_rebuild :: proc(texture_manager: ^TextureManager) {
 	texture_manager.encoder->setSamplerState(texture_manager.sampler, MAX_TEXTURES)
 }
 
-texture_create :: proc(renderer: ^Renderer, path: string, name: string) -> TextureHandle {
+texture_create :: proc(
+	texture_manager: ^TextureManager,
+	path: string,
+	name: string,
+	format: TextureFormat = {.RGBA8Unorm_sRGB, 4},
+) -> TextureHandle {
 	w, h, channels: i32
 
 	cpath := strings.clone_to_cstring(path)
-	pixels := STBI.load(cpath, &w, &h, &channels, 4)
+	pixels := STBI.load(cpath, &w, &h, &channels, format.channels)
 	defer STBI.image_free(pixels)
 	defer delete(cpath)
 
 	texture_data := TextureData {
 		pixels   = pixels,
-		w        = w,
-		h        = h,
+		width    = w,
+		height   = h,
 		channels = channels,
 		name     = name,
 	}
 
-	return texture_create_from_data(renderer, texture_data)
+	return texture_create_from_data(texture_manager, texture_data, format)
 }
 
-texture_create_from_data :: proc(renderer: ^Renderer, texture_data: TextureData) -> TextureHandle {
+TextureFormat :: struct {
+	pixels:   MTL.PixelFormat,
+	channels: i32,
+}
+
+texture_create_from_data :: proc(
+	texture_manager: ^TextureManager,
+	texture_data: TextureData,
+	format: TextureFormat = {.RGBA8Unorm_sRGB, 4},
+) -> TextureHandle {
 	desc := MTL.TextureDescriptor.texture2DDescriptorWithPixelFormat(
-		.RGBA8Unorm_sRGB,
-		cast(NS.UInteger)texture_data.w,
-		cast(NS.UInteger)texture_data.h,
+		format.pixels,
+		cast(NS.UInteger)texture_data.width,
+		cast(NS.UInteger)texture_data.height,
 		false,
 	)
 	desc->setStorageMode(.Shared)
 	desc->setUsage({.ShaderRead})
 
-	texture := renderer.device->newTextureWithDescriptor(desc)
+	texture := texture_manager.device->newTextureWithDescriptor(desc)
 	region := MTL.Region {
 		origin = {0, 0, 0},
-		size   = {cast(NS.Integer)texture_data.w, cast(NS.Integer)texture_data.h, 1},
+		size   = {cast(NS.Integer)texture_data.width, cast(NS.Integer)texture_data.height, 1},
 	}
-	texture->replaceRegion(region, 0, texture_data.pixels, cast(NS.UInteger)texture_data.w * 4)
+	texture->replaceRegion(
+		region,
+		0,
+		texture_data.pixels,
+		cast(NS.UInteger)(texture_data.width * format.channels),
+	)
 
-	append(&renderer.texture_manager.textures, texture)
-	texture_manager_rebuild(renderer.texture_manager)
+	append(&texture_manager.textures, texture)
+	texture_manager_rebuild(texture_manager)
 
-	handle := TextureHandle(len(renderer.texture_manager.textures) - 1)
-	append(&renderer.texture_manager.texture_names, texture_data.name)
+	handle := TextureHandle(len(texture_manager.textures) - 1)
+	append(&texture_manager.texture_names, texture_data.name)
 	return handle
 }
 

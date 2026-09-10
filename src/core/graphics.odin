@@ -85,7 +85,7 @@ graphics_add_text :: proc(
 	color: Color,
 ) {
 	real_font_size := text_fit(font, text, font_size, rect)
-	font_validate_size(font, renderer.device, real_font_size)
+	font_validate_size(font, renderer.texture_manager, real_font_size)
 
 	x := rect.x
 	y := rect.y
@@ -130,6 +130,7 @@ graphics_add_text :: proc(
 		total_uvs[:],
 		color,
 		Mode.Text,
+		TexID(font.texture),
 	)
 
 	gpu_buffer_append(&renderer.vertices, vertices)
