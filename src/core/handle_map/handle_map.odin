@@ -6,8 +6,9 @@
 
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-package omecore
+package omehandlemap
 
+import "base:builtin"
 import "base:runtime"
 import "core:mem"
 import "core:mem/virtual"
@@ -23,7 +24,7 @@ HandleMap :: struct($T: typeid, $HT: typeid) {
 	unused_items: [dynamic]u32,
 }
 
-handle_map_make :: proc(
+make :: proc(
 	$T: typeid,
 	$HT: typeid,
 	allocator: mem.Allocator = context.allocator,
@@ -32,8 +33,8 @@ handle_map_make :: proc(
 	err: runtime.Allocator_Error,
 ) {
 	handle_map = HandleMap(T, HT) {
-		items        = make([dynamic]^T, allocator),
-		unused_items = make([dynamic]u32, allocator),
+		items        = builtin.make([dynamic]^T, allocator),
+		unused_items = builtin.make([dynamic]u32, allocator),
 	}
 
 	virtual.arena_init_growing(
@@ -44,11 +45,12 @@ handle_map_make :: proc(
 	return handle_map, nil
 }
 
+@(private = "file")
 arena_initialized :: proc(arena: virtual.Arena) -> bool {
 	return arena.curr_block != nil
 }
 
-handle_map_add :: proc(
+add :: proc(
 	handle_map: ^HandleMap($T, $HT),
 	value: T,
 ) -> (
@@ -56,12 +58,12 @@ handle_map_add :: proc(
 	err: runtime.Allocator_Error,
 ) {
 	if !arena_initialized(handle_map.items_arena) {
-		handle_map^ = handle_map_make(T, HT) or_return
+		handle_map^ = make(T, HT) or_return
 	}
 
 	value := value
 
-	if len(handle_map.unused_items) > 0 {
+	if builtin.len(handle_map.unused_items) > 0 {
 		reuse_index := pop(&handle_map.unused_items)
 		reused := handle_map.items[reuse_index]
 		gen := reused.handle.gen
@@ -73,21 +75,21 @@ handle_map_add :: proc(
 
 	items_allocator := virtual.arena_allocator(&handle_map.items_arena)
 
-	if len(handle_map.items) == 0 {
+	if builtin.len(handle_map.items) == 0 {
 		zero_dummy := new(T, items_allocator) or_return
 		append(&handle_map.items, zero_dummy)
 	}
 
 	new_item := new(T, items_allocator) or_return
 	new_item^ = value
-	new_item.handle.idx = u32(len(handle_map.items))
+	new_item.handle.idx = u32(builtin.len(handle_map.items))
 	new_item.handle.gen = 1
 	append(&handle_map.items, new_item)
 	return new_item.handle, nil
 }
 
-handle_map_get :: proc(m: HandleMap($T, $HT), h: HT) -> ^T {
-	if h.idx <= 0 || h.idx >= u32(len(m.items)) {
+get :: proc(m: HandleMap($T, $HT), h: HT) -> ^T {
+	if h.idx <= 0 || h.idx >= u32(builtin.len(m.items)) {
 		return nil
 	}
 
@@ -98,8 +100,8 @@ handle_map_get :: proc(m: HandleMap($T, $HT), h: HT) -> ^T {
 	return nil
 }
 
-handle_map_remove :: proc(m: ^HandleMap($T, $HT), h: HT) {
-	if h.idx <= 0 || h.idx >= u32(len(m.items)) {
+remove :: proc(m: ^HandleMap($T, $HT), h: HT) {
+	if h.idx <= 0 || h.idx >= u32(builtin.len(m.items)) {
 		return
 	}
 
@@ -109,12 +111,42 @@ handle_map_remove :: proc(m: ^HandleMap($T, $HT), h: HT) {
 	}
 }
 
-handle_map_valid :: proc(m: HandleMap($T, $HT), h: HT) -> bool {
-	return handle_map_get(m, h) != nil
+valid :: proc(m: HandleMap($T, $HT), h: HT) -> bool {
+	return get(m, h) != nil
 }
 
-handle_map_delete :: proc(handle_map: ^HandleMap($T, $HT)) {
+len :: proc(m: HandleMap($T, $HT)) -> int {
+	return max(builtin.len(m.items), 1) - builtin.len(m.unused_items) - 1
+}
+
+HandleMapIterator :: struct($T: typeid, $HT: typeid) {
+	m:     ^HandleMap(T, HT),
+	index: int,
+}
+
+make_iter :: proc(m: ^HandleMap($T, $HT)) -> HandleMapIterator(T, HT) {
+	return {m = m}
+}
+
+iter :: proc(it: ^HandleMapIterator($T, $HT)) -> (val: ^T, h: HT, cond: bool) {
+	for _ in it.index ..< builtin.len(it.m.items) {
+		item := it.m.items[it.index]
+		it.index += 1
+
+		if item.handle.idx != 0 {
+			return item, item.handle, true
+		}
+	}
+
+	return nil, {}, false
+}
+
+skip :: proc(e: $T) -> bool {
+	return e.handle.idx == 0
+}
+
+delete :: proc(handle_map: ^HandleMap($T, $HT)) {
 	virtual.arena_destroy(&handle_map.items_arena)
-	delete(handle_map.items)
-	delete(handle_map.unused_items)
+	builtin.delete(handle_map.items)
+	builtin.delete(handle_map.unused_items)
 }

@@ -4,13 +4,14 @@ import "base:runtime"
 import "core:mem"
 
 import "ome:core"
+import "ome:core/handle_map"
 
 Manager :: struct {
-	scenes: core.HandleMap(Scene, SceneHandle),
+	scenes: handle_map.HandleMap(Scene, SceneHandle),
 }
 
 manager_create :: proc(allocator: mem.Allocator = context.allocator) -> Manager {
-	scenes, err := core.handle_map_make(Scene, SceneHandle, allocator)
+	scenes, err := handle_map.make(Scene, SceneHandle, allocator)
 	assert(err == runtime.Allocator_Error.None)
 	return Manager{scenes = scenes}
 }
@@ -21,7 +22,7 @@ manager_add_scene :: proc(
 	name: string,
 	allocator: mem.Allocator = context.allocator,
 ) -> SceneHandle {
-	handle, err := core.handle_map_add(&manager.scenes, scene_make(name, rect, allocator))
+	handle, err := handle_map.add(&manager.scenes, scene_make(name, rect, allocator))
 	assert(err == runtime.Allocator_Error.None)
 	return handle
 }
@@ -32,5 +33,5 @@ manager_delete :: proc(manager: ^Manager) {
 		scene_delete(scene)
 	}
 
-	core.handle_map_delete(&manager.scenes)
+	handle_map.delete(&manager.scenes)
 }

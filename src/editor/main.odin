@@ -9,6 +9,7 @@ import "core:mem"
 import SDL "vendor:sdl3"
 
 import "ome:core"
+import "ome:core/handle_map"
 import "ome:ui"
 
 track_start :: proc(allocator: mem.Allocator) -> (mem.Allocator, ^mem.Tracking_Allocator) {
@@ -71,7 +72,7 @@ main :: proc() {
 		free(font)
 	}
 
-	core.font_load(font, app.renderer.texture_manager, "assets/fonts/Iosevka.ttf", {32, 64})
+	core.font_load(font, "assets/fonts/Iosevka.ttf", {32, 64})
 	atlas := core.sprite_atlas_create(app.renderer, "assets/textures/", "main_atlas")
 	defer core.sprite_atlas_destroy(&atlas)
 
@@ -81,7 +82,7 @@ main :: proc() {
 	defer ui.manager_delete(&manager)
 
 	scene_handle := ui.manager_add_scene(&manager, screen_rect, "main")
-	scene := core.handle_map_get(manager.scenes, scene_handle)
+	scene := handle_map.get(manager.scenes, scene_handle)
 	ui.scene_add_panel(
 		scene,
 		scene.root_handle,
@@ -116,6 +117,7 @@ main :: proc() {
 	for !app.quit {
 		core.app_process_events(app)
 
+		core.font_flush(font, app.renderer.texture_manager)
 		core.app_pre_render(app)
 
 		core.renderer_set_camera(app.renderer, 2)
@@ -129,7 +131,7 @@ main :: proc() {
 			app.renderer,
 			"HeLLO",
 			font,
-			32,
+			77,
 			{100, 100, 500, 500},
 			core.Color{0, 0, 255, 255},
 		)

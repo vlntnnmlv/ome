@@ -1,11 +1,10 @@
 package omecore
 
 import "core:os"
-import "core:path/filepath"
 import "core:slice"
-import "core:strings"
+import "ome:core/handle_map"
 
-import STBI "vendor:stb/image"
+import STBRP "vendor:stb/rect_pack"
 import STBTT "vendor:stb/truetype"
 
 INITIAL_BITMAP_SIZE :: 1024
@@ -17,16 +16,22 @@ CharAmount :: 95
 FontError :: enum {
 	None = 0,
 	File_Error,
+	Init_Error,
 	Packing_Error,
 }
 
 Font :: struct {
-	path:        string,
-	bitmap_size: i32,
-	bitmap:      []u8,
-	sizes:       [dynamic]u32,
-	char_data:   map[u32][]STBTT.packedchar,
-	texture:     TextureHandle,
+	path:         string,
+	data:         []u8,
+	info:         STBTT.fontinfo,
+	pack_context: STBTT.pack_context,
+	bitmap_size:  i32,
+	bitmap:       []u8,
+	sizes:        [dynamic]u32,
+	pending:      [dynamic]u32,
+	char_data:    map[u32][]STBTT.packedchar,
+	texture:      TextureHandle,
+	dirty:        bool,
 }
 
 FontManager :: struct {
@@ -42,115 +47,123 @@ font_manager_create :: proc() -> ^FontManager {
 	return font_manager
 }
 
-font_load :: proc(font: ^Font, texture_manager: ^TextureManager, path: string, sizes: []u32 = {}) {
+font_load :: proc(font: ^Font, path: string, sizes: []u32 = {}) -> FontError {
 	font.path = path
 	font.bitmap_size = INITIAL_BITMAP_SIZE
 
-	font.sizes = make([dynamic]u32)
-
-	for size in sizes do append(&font.sizes, size)
-
-	if len(font.sizes) == 0 || !slice.contains(font.sizes[:], REFERENCE_FONT_SIZE) {
-		append(&font.sizes, REFERENCE_FONT_SIZE)
-	}
-
-	font_pack(font, texture_manager)
-}
-
-font_pack :: proc(font: ^Font, texture_manager: ^TextureManager) {
-	for {
-		err := font_pack_internal(font, texture_manager)
-		if err == .Packing_Error do font.bitmap_size *= 2
-		else do break
-	}
-}
-
-font_validate_size :: proc(font: ^Font, texture_manager: ^TextureManager, size: u32) {
-	if !slice.contains(font.sizes[:], size) {
-		append(&font.sizes, size)
-		font_pack(font, texture_manager)
-	}
-}
-
-font_pack_internal :: proc(font: ^Font, texture_manager: ^TextureManager) -> FontError { 	//, device: ^MTL.Device)
-	font_data, err := os.read_entire_file_from_path(font.path, context.temp_allocator)
-	defer delete(font_data, context.temp_allocator)
+	data, err := os.read_entire_file_from_path(font.path, context.allocator)
 	if err != nil do return .File_Error
+	font.data = data
 
-	if font.bitmap != nil do delete(font.bitmap)
-	if font.char_data != nil {
-		for _, &char_data in font.char_data do delete(char_data)
-		delete(font.char_data)
-	}
+	if !STBTT.InitFont(&font.info, raw_data(font.data), 0) do return .Init_Error
 
-	// create empty data
-	font.bitmap, err = make([]u8, font.bitmap_size * font.bitmap_size)
+	font.bitmap = make([]u8, font.bitmap_size * font.bitmap_size)
 	font.char_data = make(map[u32][]STBTT.packedchar)
-	for size in font.sizes {
-		font.char_data[size] = make([]STBTT.packedchar, CharAmount)
+	font.sizes = make([dynamic]u32)
+	font.pending = make([dynamic]u32)
+
+	if STBTT.PackBegin(
+		   &font.pack_context,
+		   raw_data(font.bitmap),
+		   font.bitmap_size,
+		   font.bitmap_size,
+		   0,
+		   1,
+		   nil,
+	   ) ==
+	   0 {
+		return .Packing_Error
 	}
 
-	// pack font
-	pack_context := new(STBTT.pack_context, context.temp_allocator)
-	STBTT.PackBegin(pack_context, &font.bitmap[0], font.bitmap_size, font.bitmap_size, 0, 1, nil)
-	STBTT.PackSetOversampling(pack_context, 2, 2)
-	for size, i in font.sizes {
-		if ok := STBTT.PackFontRange(
-			pack_context,
-			&font_data[0],
-			0,
-			cast(f32)size,
-			CharAtStart,
-			CharAmount,
-			&font.char_data[font.sizes[i]][0],
-		); ok != 1 {
-			STBTT.PackEnd(pack_context)
+	STBTT.PackSetOversampling(&font.pack_context, 2, 2)
+
+	font_pack_size(font, REFERENCE_FONT_SIZE) or_return
+
+	for size in sizes {
+		if size == REFERENCE_FONT_SIZE do continue
+		font_pack_size(font, size) or_return
+	}
+
+	return .None
+}
+
+font_ensure_size :: proc(font: ^Font, size: u32) {
+	if slice.contains(font.sizes[:], size) do return
+	if slice.contains(font.pending[:], size) do return
+	append(&font.pending, size)
+}
+
+font_nearest_size :: proc(font: ^Font, size: u32) -> u32 {
+	best_fit := font.sizes[0]
+	for s in font.sizes {
+		if abs(int(s) - int(size)) < abs(int(best_fit) - int(size)) do best_fit = s
+	}
+	return best_fit
+}
+
+font_pack_size :: proc(font: ^Font, size: u32) -> FontError {
+	chars := make([]STBTT.packedchar, CharAmount)
+
+	range := STBTT.pack_range {
+		font_size                        = f32(size),
+		first_unicode_codepoint_in_range = CharAtStart,
+		num_chars                        = CharAmount,
+		chardata_for_range               = raw_data(chars),
+	}
+
+	rects := make([]STBRP.Rect, CharAmount, context.temp_allocator)
+
+	n := STBTT.PackFontRangesGatherRects(
+		&font.pack_context,
+		&font.info,
+		&range,
+		1,
+		raw_data(rects),
+	)
+	STBTT.PackFontRangesPackRects(&font.pack_context, raw_data(rects), n)
+
+	for r in rects[:n] {
+		if !r.was_packed {
+			delete(chars)
 			return .Packing_Error
 		}
 	}
-	STBTT.PackEnd(pack_context)
 
-	font.texture = texture_create_from_data(
-		texture_manager,
-		TextureData {
-			name = "font",
-			pixels = raw_data(font.bitmap),
-			width = font.bitmap_size,
-			height = font.bitmap_size,
-			channels = 1,
-			in_atlas = false,
-			atlas_rect = Rect{},
-		},
-		TextureFormat{.R8Unorm, 1},
-	)
+	STBTT.PackFontRangesRenderIntoRects(&font.pack_context, &font.info, &range, 1, raw_data(rects))
 
-	// samp_desc := NS.new(MTL.SamplerDescriptor)
-	// samp_desc->setMinFilter(.Nearest)
-	// samp_desc->setMagFilter(.Nearest)
-	// samp_desc->setSAddressMode(.ClampToZero)
-	// samp_desc->setTAddressMode(.ClampToZero)
-	// font.sampler = texture_manager.device->newSamplerState(samp_desc)
-
-	// DEBUG: save bitmap to .png
-	filename := strings.concatenate(
-		{
-			"debug/",
-			strings.split(filepath.base(font.path), ".", context.temp_allocator)[0],
-			".png",
-		},
-		context.temp_allocator,
-	)
-
-	STBI.write_png(
-		strings.clone_to_cstring(filename, context.temp_allocator),
-		font.bitmap_size,
-		font.bitmap_size,
-		1,
-		raw_data(font.bitmap),
-		pack_context.stride_in_bytes,
-	)
+	font.char_data[size] = chars
+	append(&font.sizes, size)
+	slice.sort(font.sizes[:])
+	font.dirty = true
 
 	return .None
+}
+
+font_flush :: proc(font: ^Font, texture_manager: ^TextureManager) {
+	for size in font.pending do font_pack_size(font, size)
+	clear(&font.pending)
+
+	if !font.dirty do return
+
+	if !handle_map.valid(texture_manager.textures, font.texture) {
+		font.texture = texture_create_from_data(
+			texture_manager,
+			TextureData {
+				name = "font",
+				pixels = raw_data(font.bitmap),
+				width = font.bitmap_size,
+				height = font.bitmap_size,
+				channels = 1,
+				in_atlas = false,
+				atlas_rect = Rect{},
+			},
+			{.R8Unorm, 1},
+		)
+	} else {
+		texture_write(texture_manager, font.texture, raw_data(font.bitmap), {.R8Unorm, 1})
+	}
+
+	font.dirty = false
 }
 
 font_delete :: proc(font: ^Font) {
@@ -158,7 +171,10 @@ font_delete :: proc(font: ^Font) {
 		delete(value)
 	}
 
+	STBTT.PackEnd(&font.pack_context)
 	delete(font.char_data)
 	delete(font.bitmap)
 	delete(font.sizes)
+	delete(font.data)
+	delete(font.pending)
 }

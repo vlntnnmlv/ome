@@ -4,14 +4,15 @@ import "base:runtime"
 import "core:mem"
 
 import "ome:core"
+import "ome:core/handle_map"
 
-SceneHandle :: distinct core.Handle
+SceneHandle :: distinct handle_map.Handle
 
 Scene :: struct {
 	uuid:        core.UUID,
 	handle:      SceneHandle,
 	root_handle: PanelHandle,
-	panels:      core.HandleMap(Panel, PanelHandle),
+	panels:      handle_map.HandleMap(Panel, PanelHandle),
 	name:        string,
 }
 
@@ -20,7 +21,7 @@ scene_make :: proc(
 	rect: core.Rect,
 	allocator: mem.Allocator = context.allocator,
 ) -> Scene {
-	panels, err := core.handle_map_make(Panel, PanelHandle, allocator)
+	panels, err := handle_map.make(Panel, PanelHandle, allocator)
 	assert(err == runtime.Allocator_Error.None)
 
 	scene: Scene = {
@@ -30,7 +31,7 @@ scene_make :: proc(
 
 	root_panel := panel_make(EMPTY_HANDLE, "root", rect, PanelSpec{}, allocator)
 
-	root_handle, err_2 := core.handle_map_add(&scene.panels, root_panel)
+	root_handle, err_2 := handle_map.add(&scene.panels, root_panel)
 	assert(err_2 == runtime.Allocator_Error.None)
 
 	scene.root_handle = root_handle
@@ -52,12 +53,12 @@ scene_add_panel :: proc(
 	allocator: mem.Allocator = context.allocator,
 ) {
 	panel := panel_make(parent_handle, name, rect, spec, allocator)
-	panel_handle, err := core.handle_map_add(&scene.panels, panel)
+	panel_handle, err := handle_map.add(&scene.panels, panel)
 	assert(err == runtime.Allocator_Error.None)
 
 	if parent_handle == EMPTY_HANDLE do return
 
-	parent := core.handle_map_get(scene.panels, parent_handle)
+	parent := handle_map.get(scene.panels, parent_handle)
 	append(&parent.children_handles, panel_handle)
 }
 
@@ -66,8 +67,8 @@ scene_render :: proc(renderer: ^core.Renderer, scene: ^Scene) {
 }
 
 scene_delete :: proc(scene: ^Scene, allocator: mem.Allocator = context.allocator) {
-	panel_delete(scene, core.handle_map_get(scene.panels, scene.root_handle), allocator)
+	panel_delete(scene, handle_map.get(scene.panels, scene.root_handle), allocator)
 
 	core.uuid_delete(&scene.uuid, allocator)
-	core.handle_map_delete(&scene.panels)
+	handle_map.delete(&scene.panels)
 }

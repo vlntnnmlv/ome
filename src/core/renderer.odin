@@ -8,8 +8,9 @@ import "core:sync"
 import NS "core:sys/darwin/Foundation"
 import MTL "vendor:darwin/Metal"
 import CA "vendor:darwin/QuartzCore"
-
 import SDL "vendor:sdl3"
+
+import "ome:core/handle_map"
 
 MAX_CAMERAS: u32 : 4
 
@@ -296,9 +297,9 @@ renderer_flush :: proc(renderer: ^Renderer) {
 	)
 
 	renderer.frame_context.encoder->setFragmentBuffer(renderer.texture_manager.arguments, 0, 0)
-	if len(renderer.texture_manager.textures) > 0 {
+	if len(renderer.texture_manager.resources) > 0 {
 		renderer.frame_context.encoder->useResourcesStages(
-			transmute([]^MTL.Resource)renderer.texture_manager.textures[:],
+			renderer.texture_manager.resources[:],
 			{.Read},
 			{.Fragment},
 		)
@@ -450,9 +451,9 @@ render_texture_by_handle :: proc(
 	uvs: [dynamic]Uv
 
 	if rslice_offset, ok := slice_offset.?; ok {
-		tex := renderer.texture_manager.textures[handle]
-		tw := cast(f32)tex->width()
-		th := cast(f32)tex->height()
+		tex := handle_map.get(renderer.texture_manager.textures, handle)
+		tw := cast(f32)tex.data->width()
+		th := cast(f32)tex.data->height()
 
 		positions = rect_to_vertices_nine_slice(rect, rslice_offset)
 		uvs = offset_to_uvs_nine_slice(rslice_offset, tw, th)
@@ -471,20 +472,18 @@ render_texture_by_name :: proc(
 	color: Maybe(Color) = nil,
 	slice_offset: Maybe(RectOffset) = nil,
 ) {
-	i, found := slice.linear_search(renderer.texture_manager.texture_names[:], name)
+	handle, found := texture_find_by_name(renderer.texture_manager, name)
 	if !found {
 		return
 	}
-
-	handle := TextureHandle(i)
 
 	positions: [dynamic]Position
 	uvs: [dynamic]Uv
 
 	if rslice_offset, ok := slice_offset.?; ok {
-		tex := renderer.texture_manager.textures[handle]
-		tw := cast(f32)tex->width()
-		th := cast(f32)tex->height()
+		tex := handle_map.get(renderer.texture_manager.textures, handle)
+		tw := cast(f32)tex.data->width()
+		th := cast(f32)tex.data->height()
 
 		positions = rect_to_vertices_nine_slice(rect, rslice_offset)
 		uvs = offset_to_uvs_nine_slice(rslice_offset, tw, th)

@@ -1,10 +1,12 @@
 package omeui
 
-import "ome:core"
-
 import "core:mem"
 
-PanelHandle :: distinct core.Handle
+import "ome:core"
+import "ome:core/handle_map"
+
+
+PanelHandle :: distinct handle_map.Handle
 
 EMPTY_HANDLE :: PanelHandle{}
 
@@ -38,7 +40,7 @@ panel_make :: proc(
 
 panel_delete :: proc(scene: ^Scene, panel: ^Panel, allocator: mem.Allocator = context.allocator) {
 	for child_handle in panel.children_handles {
-		panel_delete(scene, core.handle_map_get(scene.panels, child_handle), allocator)
+		panel_delete(scene, handle_map.get(scene.panels, child_handle), allocator)
 	}
 
 	core.uuid_delete(&panel.uuid, allocator)
@@ -63,7 +65,7 @@ panel_delete :: proc(scene: ^Scene, panel: ^Panel, allocator: mem.Allocator = co
 // }
 
 panel_render :: proc(renderer: ^core.Renderer, scene: ^Scene, handle: PanelHandle) {
-	panel := core.handle_map_get(scene.panels, handle)
+	panel := handle_map.get(scene.panels, handle)
 	color := core.Color{255, 0, 0, 255}
 	if panel.hovered do color = core.Color{0, 255, 0, 255}
 

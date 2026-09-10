@@ -1,15 +1,20 @@
 package omecore
 
+import "base:runtime"
 import "core:strings"
+
 import NS "core:sys/darwin/Foundation"
 import MTL "vendor:darwin/Metal"
 import STBI "vendor:stb/image"
 
+import "ome:core/handle_map"
+
 MAX_TEXTURES :: 256
 
 Texture :: struct {
-	data: ^MTL.Texture,
-	name: string,
+	handle: TextureHandle,
+	data:   ^MTL.Texture,
+	name:   string,
 }
 
 TextureData :: struct {
@@ -22,53 +27,7 @@ TextureData :: struct {
 	atlas_rect: Rect,
 }
 
-TextureManager :: struct {
-	device:        ^MTL.Device,
-	textures:      [dynamic]^MTL.Texture,
-	texture_names: [dynamic]string,
-	sampler:       ^MTL.SamplerState,
-	encoder:       ^MTL.ArgumentEncoder,
-	arguments:     ^MTL.Buffer,
-}
-
-TextureHandle :: distinct u32
-
-texture_manager_create :: proc(
-	device: ^MTL.Device,
-	fragment_fn: ^MTL.Function,
-) -> ^TextureManager {
-	texture_manager := new(TextureManager)
-	texture_manager.textures = make([dynamic]^MTL.Texture)
-
-	samp_desc := NS.new(MTL.SamplerDescriptor)
-	samp_desc->setMinFilter(.Linear)
-	samp_desc->setMagFilter(.Linear)
-	samp_desc->setSupportArgumentBuffers(true)
-
-	texture_manager.device = device
-
-	texture_manager.sampler = device->newSamplerState(samp_desc)
-	texture_manager.encoder = fragment_fn->newArgumentEncoder(0)
-	texture_manager.arguments = device->newBufferWithLength(
-		texture_manager.encoder->encodedLength(),
-		MTL.ResourceStorageModeShared,
-	)
-
-	texture_manager_rebuild(texture_manager)
-
-	return texture_manager
-}
-
-texture_manager_rebuild :: proc(texture_manager: ^TextureManager) {
-	texture_manager.encoder->setArgumentBufferWithOffset(texture_manager.arguments, 0)
-	i := 0
-	for texture in texture_manager.textures {
-		texture_manager.encoder->setTexture(texture, cast(NS.UInteger)i)
-		i += 1
-	}
-
-	texture_manager.encoder->setSamplerState(texture_manager.sampler, MAX_TEXTURES)
-}
+TextureHandle :: distinct handle_map.Handle
 
 texture_create :: proc(
 	texture_manager: ^TextureManager,
@@ -125,19 +84,52 @@ texture_create_from_data :: proc(
 		cast(NS.UInteger)(texture_data.width * format.channels),
 	)
 
-	append(&texture_manager.textures, texture)
+	handle, err := handle_map.add(
+		&texture_manager.textures,
+		Texture{data = texture, name = strings.clone(texture_data.name)},
+	)
+	assert(err == runtime.Allocator_Error.None)
+
 	texture_manager_rebuild(texture_manager)
 
-	handle := TextureHandle(len(texture_manager.textures) - 1)
-	append(&texture_manager.texture_names, texture_data.name)
 	return handle
 }
 
-texture_manager_delete :: proc(texture_manager: ^TextureManager) {
-	for texture in texture_manager.textures {
-		texture->release()
+texture_write :: proc(
+	tm: ^TextureManager,
+	handle: TextureHandle,
+	pixels: [^]byte,
+	format: TextureFormat,
+) {
+	texture := handle_map.get(tm.textures, handle)
+	if texture == nil do return
+
+	w := texture.data->width()
+	h := texture.data->height()
+	region := MTL.Region {
+		origin = {0, 0, 0},
+		size   = {cast(NS.Integer)w, cast(NS.Integer)h, 1},
+	}
+	texture.data->replaceRegion(region, 0, pixels, w * cast(NS.UInteger)format.channels)
+}
+
+texture_find_by_name :: proc(tm: ^TextureManager, name: string) -> (TextureHandle, bool) {
+	it := handle_map.make_iter(&tm.textures)
+	for texture in handle_map.iter(&it) {
+		if texture.name == name do return texture.handle, true
+	}
+	return {}, false
+}
+
+texture_destroy :: proc(tm: ^TextureManager, handle: TextureHandle) {
+	texture := handle_map.get(tm.textures, handle)
+	if texture == nil {
+		return
 	}
 
-	delete(texture_manager.textures)
-	delete(texture_manager.texture_names)
+	texture.data->release()
+	delete(texture.name)
+	handle_map.remove(&tm.textures, handle)
+
+	texture_manager_rebuild(tm)
 }
