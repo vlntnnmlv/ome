@@ -1,6 +1,7 @@
 package omeui
 
-import "../core"
+import "ome:core"
+
 import "core:mem"
 
 PanelHandle :: distinct core.Handle
@@ -71,7 +72,7 @@ panel_render :: proc(renderer: ^core.Renderer, scene: ^Scene, handle: PanelHandl
 	case PanelSpec:
 		break
 	case TextSpec:
-		core.render_text(renderer, spec.text, spec.font_size, panel.rect, spec.color)
+		core.render_text(renderer, spec.text, spec.font, spec.font_size, panel.rect, spec.color)
 	case ImageSpec:
 		core.render_texture(renderer, spec.texture_handle, panel.rect, spec.color)
 	}

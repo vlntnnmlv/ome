@@ -1,4 +1,4 @@
-package ome
+package omecore
 
 import "core:log"
 import "core:os"
@@ -43,7 +43,9 @@ Renderer :: struct {
 	cameras:              [MAX_CAMERAS]Camera,
 	active_state:         RenderState,
 	texture_manager:      ^TextureManager,
-	font:                 Font,
+	// font:                 Font,
+	font_texture:         ^MTL.Texture,
+	font_sampler:         ^MTL.SamplerState,
 	logical_size:         [2]int,
 	vertices:             GPUBuffer(Vertex2D),
 	frame_context:        FrameContext,
@@ -297,9 +299,12 @@ renderer_flush :: proc(renderer: ^Renderer) {
 		1,
 	)
 
-	if renderer.font.texture != nil {
-		renderer.frame_context.encoder->setFragmentTexture(renderer.font.texture, 0)
-		renderer.frame_context.encoder->setFragmentSamplerState(renderer.font.sampler, 0)
+	// SCAFFOLD
+	{
+		if renderer.font_texture != nil {
+			renderer.frame_context.encoder->setFragmentTexture(renderer.font_texture, 0)
+			renderer.frame_context.encoder->setFragmentSamplerState(renderer.font_sampler, 0)
+		}
 	}
 
 	renderer.frame_context.encoder->setFragmentBuffer(renderer.texture_manager.arguments, 0, 0)
@@ -360,7 +365,7 @@ resolve_color :: proc(color: Maybe(Color)) -> Color {
 	if real_color, ok := color.?; ok {
 		return real_color
 	}
-	return BLACK_COLOR
+	return BLACK
 }
 
 render_line :: proc(
@@ -432,11 +437,12 @@ render_rect :: proc(renderer: ^Renderer, rect: Rect, color: Maybe(Color) = nil) 
 render_text :: proc(
 	renderer: ^Renderer,
 	text: string,
+	font: ^Font,
 	font_size: u32,
 	rect: Rect,
 	color: Maybe(Color) = nil,
 ) {
-	graphics_add_text(renderer, text, font_size, rect, resolve_color(color))
+	graphics_add_text(renderer, text, font, font_size, rect, resolve_color(color))
 }
 
 render_texture :: proc {
@@ -586,7 +592,7 @@ renderer_delete :: proc(renderer: ^Renderer) {
 		sync.sema_wait(&renderer.frame_sema)
 	}
 
-	assets_delete_font(&renderer.font)
+	// font_delete(&renderer.font)
 
 	texture_manager_delete(renderer.texture_manager)
 	free(renderer.texture_manager)
@@ -596,7 +602,11 @@ renderer_delete :: proc(renderer: ^Renderer) {
 
 	free(renderer.frame_complete_block)
 
+	renderer.pipeline_state->release()
+	renderer.command_q->release()
+	// renderer.swapchain->release()
 	renderer.device->release()
+
 }
 
 @(private)

@@ -1,4 +1,4 @@
-package ome
+package omecore
 
 import "core:log"
 import "core:mem"
@@ -50,13 +50,9 @@ sprite_atlas_create_from_files :: proc(
 	sprites := make(map[string](SpriteData))
 
 	for i in 0 ..< len(paths) {
-		pixels := STBI.load(
-			strings.clone_to_cstring(paths[i], allocator = context.temp_allocator),
-			&w,
-			&h,
-			&channels,
-			4,
-		)
+		cpath := strings.clone_to_cstring(paths[i])
+		defer delete(cpath)
+		pixels := STBI.load(cpath, &w, &h, &channels, 4)
 		rect: STBR.Rect = {
 			id = i32(i),
 			w  = STBR.Coord(w),

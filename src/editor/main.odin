@@ -8,8 +8,8 @@ import "core:mem"
 
 import SDL "vendor:sdl3"
 
-import "../core"
-import "../ui"
+import "ome:core"
+import "ome:ui"
 
 track_start :: proc(allocator: mem.Allocator) -> (mem.Allocator, ^mem.Tracking_Allocator) {
 	tracking_allocator: ^mem.Tracking_Allocator = new(mem.Tracking_Allocator)
@@ -45,22 +45,6 @@ move_camera :: proc(app: ^core.App, key: SDL.Keycode) {
 	}
 }
 
-main_perfect :: proc() {
-	// window
-	width: f32 = 1080
-	height: f32 = 720
-
-	app, ok := core.app_create("Ome", cast(i32)width, cast(i32)height)
-	if !ok do return
-	defer core.app_close(app)
-
-	// load assets
-	// TODO: Automatcally load everything from resources folders
-	core.assets_load_font(app.renderer, "assets/fonts/Iosevka.ttf", {32, 64})
-	atlas := core.sprite_atlas_create(app.renderer, "assets/textures/", "main_atlas")
-	defer core.sprite_atlas_destroy(&atlas)
-}
-
 main :: proc() {
 	// system
 	tracked_allocator, tracking_allocator := track_start(context.allocator)
@@ -81,7 +65,9 @@ main :: proc() {
 	defer core.app_close(app)
 
 	// load assets
-	core.assets_load_font(app.renderer, "assets/fonts/Iosevka.ttf", {32, 64})
+	font: ^core.Font = new(core.Font)
+	defer free(font)
+	core.font_load(font, app.renderer.device, "assets/fonts/Iosevka.ttf", {32, 64})
 	atlas := core.sprite_atlas_create(app.renderer, "assets/textures/", "main_atlas")
 	defer core.sprite_atlas_destroy(&atlas)
 

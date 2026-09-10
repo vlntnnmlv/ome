@@ -1,4 +1,4 @@
-package ome
+package omecore
 
 Style :: struct {
 	texture_handle: TextureHandle,

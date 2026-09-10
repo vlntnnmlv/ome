@@ -1,14 +1,11 @@
-package ome
+package omecore
 
 import "core:math/linalg"
 import "core:mem"
+
 VERTICES_PER_QUAD :: 6
 VERTICES_PER_NINE_SLICED_QUAD :: 9 * VERTICES_PER_QUAD
 UNIT_RECT :: Rect{0, 0, 1, 1}
-
-// screen_to_world :: proc(logical_size: [2]int, x: f32, y: f32) -> [2]f32 {
-// 	return {2 * x / cast(f32)logical_size.x - 1, 1 - 2 * y / cast(f32)logical_size.y}
-// }
 
 rect_split_to_grid :: proc(rect: Rect, offset: RectOffset) -> [9]Rect {
 	xs := [4]f32{rect.x, rect.x + offset.left, rect.x + rect.w - offset.right, rect.x + rect.w}

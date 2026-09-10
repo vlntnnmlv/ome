@@ -1,6 +1,6 @@
 package omeui
 
-import "../core"
+import "ome:core"
 
 Spec :: union {
 	PanelSpec,
@@ -26,5 +26,6 @@ ImageSpec :: struct {
 TextSpec :: struct {
 	using panel: PanelSpec,
 	text:        string,
+	font:        ^core.Font,
 	font_size:   u32,
 }

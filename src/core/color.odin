@@ -1,10 +1,12 @@
-package ome
+package omecore
 
 import "core:math"
 
 Color :: distinct [4]u8
-TRANSPARENT_COLOR :: Color{0, 0, 0, 0}
-BLACK_COLOR :: Color{0, 0, 0, 255}
+
+TRANSPARENT :: Color{0, 0, 0, 0}
+BLACK :: Color{0, 0, 0, 255}
+WHITE :: Color{255, 255, 255, 255}
 
 @(private)
 srgb_to_linear_lut: [256]f32

@@ -3,7 +3,7 @@ package omeui
 import "base:runtime"
 import "core:mem"
 
-import "../core"
+import "ome:core"
 
 Manager :: struct {
 	scenes: core.HandleMap(Scene, SceneHandle),

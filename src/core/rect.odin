@@ -1,4 +1,8 @@
-package ome
+package omecore
+
+Rect :: struct {
+	x, y, w, h: f32,
+}
 
 shrink :: proc(rect: Rect, rect_offset: RectOffset) -> Rect {
 	return Rect {

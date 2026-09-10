@@ -1,4 +1,4 @@
-package ome
+package omecore
 
 import "core:math"
 import "core:unicode/utf8"
@@ -26,15 +26,15 @@ iterate_printable :: proc(it: ^StringPrintableIterator) -> (rune, int, bool) {
 	return 0, len(it.s), false
 }
 
-text_measure :: proc(renderer: ^Renderer, text: string, font_size: u32) -> [2]f32 {
+text_measure :: proc(font: ^Font, text: string, font_size: u32) -> [2]f32 {
 	x, y, max_x: f32 = 0, 0, 0
 	it := StringPrintableIterator{text, 0}
 	for ch in iterate_printable(&it) {
 		quad: STBTT.aligned_quad
 		STBTT.GetPackedQuad(
-			&renderer.font.char_data[REFERENCE_FONT_SIZE][0],
-			renderer.font.bitmap_size,
-			renderer.font.bitmap_size,
+			&font.char_data[REFERENCE_FONT_SIZE][0],
+			font.bitmap_size,
+			font.bitmap_size,
 			cast(i32)ch - 32,
 			&x,
 			&y,
@@ -49,8 +49,8 @@ text_measure :: proc(renderer: ^Renderer, text: string, font_size: u32) -> [2]f3
 	return {max_x * scale, cast(f32)font_size}
 }
 
-text_fit :: proc(renderer: ^Renderer, text: string, font_size: u32, rect: Rect) -> u32 {
-	size := text_measure(renderer, text, font_size)
+text_fit :: proc(font: ^Font, text: string, font_size: u32, rect: Rect) -> u32 {
+	size := text_measure(font, text, font_size)
 	scale_x := rect.w / size.x
 	scale_y := rect.h / size.y
 	scale := min(scale_x, scale_y)

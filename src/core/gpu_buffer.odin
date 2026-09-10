@@ -1,6 +1,7 @@
-package ome
+package omecore
 
 import "core:mem"
+// import "core:slice"
 
 import NS "core:sys/darwin/Foundation"
 import MTL "vendor:darwin/Metal"

@@ -1,4 +1,4 @@
-package ome
+package omecore
 
 import "core:strings"
 import NS "core:sys/darwin/Foundation"
@@ -73,15 +73,10 @@ texture_manager_rebuild :: proc(texture_manager: ^TextureManager) {
 texture_create :: proc(renderer: ^Renderer, path: string, name: string) -> TextureHandle {
 	w, h, channels: i32
 
-	pixels := STBI.load(
-		strings.clone_to_cstring(path, allocator = context.temp_allocator),
-		&w,
-		&h,
-		&channels,
-		4,
-	)
+	cpath := strings.clone_to_cstring(path)
+	pixels := STBI.load(cpath, &w, &h, &channels, 4)
 	defer STBI.image_free(pixels)
-	defer free_all(context.temp_allocator)
+	defer delete(cpath)
 
 	texture_data := TextureData {
 		pixels   = pixels,

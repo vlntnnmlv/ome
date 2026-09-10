@@ -9,5 +9,6 @@
 			"name": "default",
 			"checker_path": ["src/editor", "src/core"]
 		}
-	]
+	],
+	"collections": [{ "name": "ome", "path": "src" }]
 }

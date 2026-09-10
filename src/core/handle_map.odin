@@ -6,7 +6,7 @@
 
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-package ome
+package omecore
 
 import "base:runtime"
 import "core:mem"
@@ -99,7 +99,7 @@ handle_map_get :: proc(m: HandleMap($T, $HT), h: HT) -> ^T {
 }
 
 handle_map_remove :: proc(m: ^HandleMap($T, $HT), h: HT) {
-	if h.idx <= 0 || h.idx >= u32(builtin.len(m.items)) {
+	if h.idx <= 0 || h.idx >= u32(len(m.items)) {
 		return
 	}
 
@@ -109,8 +109,8 @@ handle_map_remove :: proc(m: ^HandleMap($T, $HT), h: HT) {
 	}
 }
 
-valid :: proc(m: HandleMap($T, $HT), h: HT) -> bool {
-	return get(m, h) != nil
+handle_map_valid :: proc(m: HandleMap($T, $HT), h: HT) -> bool {
+	return handle_map_get(m, h) != nil
 }
 
 handle_map_delete :: proc(handle_map: ^HandleMap($T, $HT)) {

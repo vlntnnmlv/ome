@@ -1,4 +1,4 @@
-package ome
+package omecore
 
 import MTL "vendor:darwin/Metal"
 import STBTT "vendor:stb/truetype"
@@ -12,12 +12,6 @@ Mode :: enum u32 {
 Position :: distinct [4]f32
 Uv :: distinct [2]f32
 TexID :: distinct u32
-Rect :: struct {
-	x, y, w, h: f32,
-}
-RectOffset :: struct {
-	left, right, top, bottom: f32,
-}
 
 Vertex2D :: struct {
 	position: Position,
@@ -85,12 +79,13 @@ graphics_add_quad :: proc(renderer: ^Renderer, rect: Rect, color: Color) {
 graphics_add_text :: proc(
 	renderer: ^Renderer,
 	text: string,
+	font: ^Font,
 	font_size: u32,
 	rect: Rect,
 	color: Color,
 ) {
-	real_font_size := text_fit(renderer, text, font_size, rect)
-	assets_validate_font_size(renderer, real_font_size)
+	real_font_size := text_fit(font, text, font_size, rect)
+	font_validate_size(font, renderer.device, real_font_size)
 
 	x := rect.x
 	y := rect.y
@@ -104,9 +99,9 @@ graphics_add_text :: proc(
 	for char in iterate_printable(&it) {
 		quad: STBTT.aligned_quad
 		STBTT.GetPackedQuad(
-			&renderer.font.char_data[real_font_size][0],
-			renderer.font.bitmap_size,
-			renderer.font.bitmap_size,
+			&font.char_data[real_font_size][0],
+			font.bitmap_size,
+			font.bitmap_size,
 			cast(i32)char - 32,
 			&x,
 			&y,

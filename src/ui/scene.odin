@@ -1,10 +1,9 @@
 package omeui
 
-import "../core"
 import "base:runtime"
-import "core:fmt"
-
 import "core:mem"
+
+import "ome:core"
 
 SceneHandle :: distinct core.Handle
 

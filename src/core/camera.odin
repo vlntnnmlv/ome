@@ -1,4 +1,4 @@
-package ome
+package omecore
 
 import "core:math"
 import "core:math/linalg"
