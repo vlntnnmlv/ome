@@ -1,16 +1,17 @@
 package omeresources
 
+import "base:builtin"
 import "core:log"
 import "core:mem"
 import "core:path/filepath"
 import "core:strings"
-import "ome:core/handle_map"
 
 import STBI "vendor:stb/image"
 import STBR "vendor:stb/rect_pack"
 
 import "ome:core"
 import "ome:core/gpu"
+import "ome:core/handle_map"
 
 AtlasError :: enum {
 	None = 0,
@@ -46,8 +47,8 @@ atlas_load_from_directory :: proc(
 	names: []string = core.get_file_paths_in_directory(directory_path)
 
 	defer {
-		for name in names do delete(name)
-		delete(names)
+		for name in names do builtin.delete(name)
+		builtin.delete(names)
 	}
 
 	return atlas_load_from_files(atlas, bind_table, names[:], atlas_name)
@@ -66,7 +67,7 @@ atlas_load_from_files :: proc(
 
 	for i in 0 ..< len(paths) {
 		cpath := strings.clone_to_cstring(paths[i])
-		defer delete(cpath)
+		defer builtin.delete(cpath)
 		pixels := STBI.load(cpath, &width, &height, &channels, 4)
 		rect: STBR.Rect = {
 			id = i32(i),
@@ -88,18 +89,18 @@ atlas_load_from_files :: proc(
 	}
 
 	defer {
-		delete(rects)
+		builtin.delete(rects)
 		for texture_data in textures_data {
 			STBI.image_free(texture_data.pixels)
 		}
-		delete(textures_data)
+		builtin.delete(textures_data)
 	}
 
 	atlas_size: i32 = 512
 	ctxt: STBR.Context
 	nodes: []STBR.Node = make([]STBR.Node, atlas_size)
 
-	defer delete(nodes)
+	defer builtin.delete(nodes)
 
 	STBR.init_target(&ctxt, atlas_size, atlas_size, raw_data(nodes), atlas_size)
 	pack_result := STBR.pack_rects(&ctxt, raw_data(rects), i32(len(rects)))
@@ -129,7 +130,7 @@ atlas_load_from_files :: proc(
 	}
 
 	pixels := make([]byte, atlas_size * atlas_size * 4)
-	defer delete(pixels)
+	defer builtin.delete(pixels)
 
 	atlas_data: gpu.TextureData = {
 		pixels   = raw_data(pixels),
@@ -176,10 +177,10 @@ atlas_build_texture :: proc(
 
 atlas_destroy :: proc(atlas: ^Atlas) {
 	for name, sprite in atlas.sprites {
-		delete(name)
-		delete(sprite.uvs)
+		builtin.delete(name)
+		builtin.delete(sprite.uvs)
 	}
 
 	delete_map(atlas.sprites)
-	delete(atlas.name)
+	builtin.delete(atlas.name)
 }

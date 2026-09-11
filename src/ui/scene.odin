@@ -63,7 +63,7 @@ scene_add_panel :: proc(
 	append(&parent.children_handles, panel_handle)
 }
 
-scene_render :: proc(rsrcs: ^resources.Resources, scene: ^Scene) {
+scene_render :: proc(rsrcs: ^resources.Assets, scene: ^Scene) {
 	panel_render(rsrcs, scene, scene.root_handle)
 }
 

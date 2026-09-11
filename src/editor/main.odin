@@ -32,21 +32,13 @@ track_finish :: proc(tracking_allocator: ^mem.Tracking_Allocator) {
 	mem.tracking_allocator_destroy(tracking_allocator)
 }
 
-move_camera :: proc(app: ^app.App, key: platform.Key) {
-	#partial switch key {
-	case .V:
-		gpu.renderer_get_camera_2d(app.renderer, 1).zoom += 0.1
-	case .C:
-		gpu.renderer_get_camera_2d(app.renderer, 1).zoom -= 0.1
-	case .W:
-		gpu.renderer_get_camera_2d(app.renderer, 1).position.y -= 5
-	case .A:
-		gpu.renderer_get_camera_2d(app.renderer, 1).position.x -= 5
-	case .S:
-		gpu.renderer_get_camera_2d(app.renderer, 1).position.y += 5
-	case .D:
-		gpu.renderer_get_camera_2d(app.renderer, 1).position.x += 5
-	}
+move_camera :: proc(app: ^app.App) {
+	if platform.key_down(.V) do gpu.renderer_get_camera_2d(app.renderer, 1).zoom += 0.1
+	if platform.key_down(.C) do gpu.renderer_get_camera_2d(app.renderer, 1).zoom -= 0.1
+	if platform.key_down(.W) do gpu.renderer_get_camera_2d(app.renderer, 1).position.y -= 5
+	if platform.key_down(.A) do gpu.renderer_get_camera_2d(app.renderer, 1).position.x -= 5
+	if platform.key_down(.S) do gpu.renderer_get_camera_2d(app.renderer, 1).position.y += 5
+	if platform.key_down(.D) do gpu.renderer_get_camera_2d(app.renderer, 1).position.x += 5
 }
 
 main :: proc() {
@@ -69,25 +61,25 @@ main :: proc() {
 	defer app.app_close(a)
 
 	// resources
-	rsrcs := resources.resources_create(a.renderer)
+	rsrcs := resources.create(a.renderer)
 	defer
 	{
-		resources.resources_delete(rsrcs)
+		resources.delete(rsrcs)
 		free(rsrcs)
 	}
 
-	font_handle, ferr := resources.resources_load_font(rsrcs, "assets/fonts/Iosevka.ttf", {32, 64})
+	font_handle, ferr := resources.load_font(rsrcs, "assets/fonts/Iosevka.ttf", {32, 64})
 	assert(ferr == resources.FontError.None)
 
-	atlas_handle, aerr := resources.resources_load_atlas(rsrcs, "assets/textures/ui", "ui_atlas")
+	atlas_handle, aerr := resources.load_atlas(rsrcs, "assets/textures/ui", "ui_atlas")
 	assert(aerr == resources.AtlasError.None)
 
 	// create UI
 	screen_rect := core.Rect{0, 0, width, height}
-	manager := ui.manager_create()
-	defer ui.manager_delete(&manager)
+	manager := ui.create()
+	defer ui.delete(&manager)
 
-	scene_handle := ui.manager_add_scene(&manager, screen_rect, "main")
+	scene_handle := ui.add_scene(&manager, screen_rect, "main")
 	scene := handle_map.get(manager.scenes, scene_handle)
 	ui.scene_add_panel(
 		scene,
@@ -113,24 +105,25 @@ main :: proc() {
 		viewport = {0, 0, width, height},
 	}
 
-	a.key_callbacks[.V] = proc(a: ^app.App) {move_camera(a, .V)}
-	a.key_callbacks[.C] = proc(a: ^app.App) {move_camera(a, .C)}
-	a.key_callbacks[.W] = proc(a: ^app.App) {move_camera(a, .W)}
-	a.key_callbacks[.A] = proc(a: ^app.App) {move_camera(a, .A)}
-	a.key_callbacks[.S] = proc(a: ^app.App) {move_camera(a, .S)}
-	a.key_callbacks[.D] = proc(a: ^app.App) {move_camera(a, .D)}
+	// a.key_callbacks[.V] = proc(a: ^app.App) {move_camera(a, .V)}
+	// a.key_callbacks[.C] = proc(a: ^app.App) {move_camera(a, .C)}
+	// a.key_callbacks[.W] = proc(a: ^app.App) {move_camera(a, .W)}
+	// a.key_callbacks[.A] = proc(a: ^app.App) {move_camera(a, .A)}
+	// a.key_callbacks[.S] = proc(a: ^app.App) {move_camera(a, .S)}
+	// a.key_callbacks[.D] = proc(a: ^app.App) {move_camera(a, .D)}
 
 	// start the event loop
 	for !a.quit {
 		app.app_process_events(a)
+		move_camera(a)
 
-		resources.resources_flush(rsrcs)
+		resources.flush(rsrcs)
 		app.app_pre_render(a)
 
 		gpu.renderer_set_camera(a.renderer, 2)
-		render.cube(a.renderer, {0, 0, 0}, 1, core.Color{0, 255, 0, 255})
+		render.cube(rsrcs, {0, 0, 0}, 1, core.Color{0, 255, 0, 255})
 		gpu.renderer_set_camera(a.renderer, 1)
-		render.quad(a.renderer, {400, 400, 30, 30}, core.Color{244, 244, 244, 255})
+		render.quad(rsrcs, {400, 400, 30, 30}, core.Color{244, 244, 244, 255})
 		gpu.renderer_set_camera(a.renderer, 0)
 
 		ui.scene_render(rsrcs, scene)

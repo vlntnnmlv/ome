@@ -1,5 +1,6 @@
 package omeui
 
+import "base:builtin"
 import "core:mem"
 
 import "ome:core"
@@ -45,15 +46,15 @@ panel_delete :: proc(scene: ^Scene, panel: ^Panel, allocator: mem.Allocator = co
 	}
 
 	core.uuid_delete(&panel.uuid, allocator)
-	delete(panel.children_handles)
+	builtin.delete(panel.children_handles)
 }
 
-panel_render :: proc(rsrcs: ^resources.Resources, scene: ^Scene, handle: PanelHandle) {
+panel_render :: proc(rsrcs: ^resources.Assets, scene: ^Scene, handle: PanelHandle) {
 	panel := handle_map.get(scene.panels, handle)
 	color := core.Color{255, 0, 0, 255}
 	if panel.hovered do color = core.Color{0, 255, 0, 255}
 
-	render.quad(rsrcs.renderer, panel.rect, color, 1, false)
+	render.quad(rsrcs, panel.rect, color, 1, false)
 	switch spec in panel.spec {
 	case PanelSpec:
 		break

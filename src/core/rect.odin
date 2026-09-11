@@ -9,6 +9,9 @@ Rect :: struct {
 }
 
 UNIT_RECT :: Rect{0, 0, 1, 1}
+ZERO_RECT :: Rect{0, 0, 0, 0}
+ZERO_RECT_OFFSET :: RectOffset{0, 0, 0, 0}
+
 
 shrink :: proc(rect: Rect, rect_offset: RectOffset) -> Rect {
 	return Rect {

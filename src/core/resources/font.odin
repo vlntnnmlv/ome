@@ -1,5 +1,6 @@
 package omeresources
 
+import "base:builtin"
 import "core:os"
 import "core:slice"
 
@@ -117,7 +118,7 @@ font_pack_size :: proc(font: ^Font, size: u32) -> FontError {
 
 	for r in rects[:n] {
 		if !r.was_packed {
-			delete(chars)
+			builtin.delete(chars)
 			return .Packing_Error
 		}
 	}
@@ -161,13 +162,13 @@ font_flush :: proc(font: ^Font, bind_table: ^gpu.BindTable) {
 
 font_delete :: proc(font: ^Font) {
 	for _, &value in font.char_data {
-		delete(value)
+		builtin.delete(value)
 	}
 
 	STBTT.PackEnd(&font.pack_context)
-	delete(font.char_data)
-	delete(font.bitmap)
-	delete(font.sizes)
-	delete(font.data)
-	delete(font.pending)
+	builtin.delete(font.char_data)
+	builtin.delete(font.bitmap)
+	builtin.delete(font.sizes)
+	builtin.delete(font.data)
+	builtin.delete(font.pending)
 }
