@@ -1,4 +1,4 @@
-package omecore
+package omegpu
 
 import "core:log"
 import "core:os"
@@ -8,9 +8,9 @@ import "core:sync"
 import NS "core:sys/darwin/Foundation"
 import MTL "vendor:darwin/Metal"
 import CA "vendor:darwin/QuartzCore"
-import SDL "vendor:sdl3"
 
-import "ome:core/handle_map"
+import "ome:core"
+import "ome:core/platform"
 
 MAX_CAMERAS: u32 : 4
 
@@ -40,7 +40,7 @@ Renderer :: struct {
 	swapchain:            ^CA.MetalLayer,
 	render_calls:         [dynamic]RenderCall,
 	clear_color:          MTL.ClearColor,
-	cameras:              [MAX_CAMERAS]Camera,
+	cameras:              [MAX_CAMERAS]core.Camera,
 	active_state:         RenderState,
 	bind_table:           ^BindTable,
 	logical_size:         [2]int,
@@ -50,18 +50,6 @@ Renderer :: struct {
 	frame_slot_index:     int,
 	frame_sema:           sync.Sema,
 	frame_complete_block: ^NS.Block,
-}
-
-// Corner index bits are (x, y, z) against -h / +h:
-//   0(---) 1(+--) 2(++-) 3(-+-) 4(--+) 5(+-+) 6(+++) 7(-++)
-@(private = "file")
-CUBE_FACES := [6][4]int {
-	{4, 5, 6, 7}, // +Z
-	{0, 3, 2, 1}, // -Z
-	{1, 2, 6, 5}, // +X
-	{0, 4, 7, 3}, // -X
-	{7, 6, 2, 3}, // +Y
-	{0, 1, 5, 4}, // -Y
 }
 
 @(private = "file")
@@ -91,8 +79,8 @@ shader_compile_slang :: proc(
 }
 
 renderer_create :: proc(
-	window: ^SDL.Window,
-	window_info: WindowInfo,
+	native_window: platform.NativeWindowHandle,
+	window_info: platform.WindowInfo,
 	clear_color: [4]f64,
 ) -> (
 	^Renderer,
@@ -111,14 +99,7 @@ renderer_create :: proc(
 		return nil, false
 	}
 
-	native_window := (^NS.Window)(
-		SDL.GetPointerProperty(
-			SDL.GetWindowProperties(window),
-			SDL.PROP_WINDOW_COCOA_WINDOW_POINTER,
-			nil,
-		),
-	)
-
+	native_window := (^NS.Window)(native_window)
 	if native_window == nil {
 		log.errorf("Couldn't get native window")
 		return nil, false
@@ -196,7 +177,7 @@ renderer_create :: proc(
 	renderer.logical_size = {window_info.logical_width, window_info.logical_height}
 	renderer.vertices = gpu_buffer_create(Vertex2D, renderer.device)
 
-	renderer.cameras[0] = camera2d_create(renderer.logical_size)
+	renderer.cameras[0] = core.camera2d_create(renderer.logical_size)
 
 	for i in 1 ..< MAX_CAMERAS {
 		renderer.cameras[i] = renderer.cameras[0]
@@ -230,12 +211,12 @@ renderer_set_camera :: proc(renderer: ^Renderer, index: u32) {
 	renderer.active_state.camera = index
 }
 
-renderer_get_camera_2d :: proc(renderer: ^Renderer, index: u32) -> ^Camera2D {
-	return &renderer.cameras[index].(Camera2D)
+renderer_get_camera_2d :: proc(renderer: ^Renderer, index: u32) -> ^core.Camera2D {
+	return &renderer.cameras[index].(core.Camera2D)
 }
 
-renderer_get_camera_3d :: proc(renderer: ^Renderer, index: u32) -> ^Camera3D {
-	return &renderer.cameras[index].(Camera3D)
+renderer_get_camera_3d :: proc(renderer: ^Renderer, index: u32) -> ^core.Camera3D {
+	return &renderer.cameras[index].(core.Camera3D)
 }
 
 renderer_begin :: proc(renderer: ^Renderer) {
@@ -294,7 +275,7 @@ renderer_flush :: proc(renderer: ^Renderer) {
 	}
 	for render_call in renderer.render_calls {
 		if render_call.state.camera != last_state.camera {
-			view_projection := camera_get_view_projection(
+			view_projection := core.camera_get_view_projection(
 				renderer.cameras[render_call.state.camera],
 			)
 			renderer.frame_context.encoder->setVertexBytes(
@@ -330,238 +311,21 @@ renderer_present :: proc(renderer: ^Renderer) {
 	renderer.frame_context.pool = nil
 }
 
-// --- RENDERING ---
-
-@(private = "file")
-resolve_color :: proc(color: Maybe(Color)) -> Color {
-	if real_color, ok := color.?; ok {
-		return real_color
-	}
-	return BLACK
-}
-
-render_line :: proc(
-	renderer: ^Renderer,
-	start: [2]f32,
-	end: [2]f32,
-	color: Maybe(Color) = nil,
-	thickness: int = 1,
-) {
-	graphics_add_points(renderer, {start, end}, resolve_color(color), false, thickness)
-}
-
-render_segments :: proc(
-	renderer: ^Renderer,
-	points: [][2]f32,
-	color: Maybe(Color) = nil,
-	thickness: int = 1,
-	fill: bool = false,
-) {
-	graphics_add_points(renderer, points, resolve_color(color), fill, thickness)
-}
-
-render_curve :: proc(
-	renderer: ^Renderer,
-	curve_points: [][2]f32,
-	color: Maybe(Color) = nil,
-	thickness: int = 1,
-	fill: bool = false,
-) {
-	assert(len(curve_points) == 3, "Curve rendering supports only 3 points")
-
-	points: [100][2]f32
-	for i in 0 ..< 100 {
-		phase: f32 = (f32(i) + 1.0) / 100.0
-		a_to_b := interpolate(curve_points[0], curve_points[1], phase)
-		b_to_c := interpolate(curve_points[1], curve_points[2], phase)
-		points[i] = interpolate(a_to_b, b_to_c, phase)
-	}
-	render_segments(renderer, points[:], resolve_color(color), thickness, fill)
-}
-
-
-render_quad :: proc(
-	renderer: ^Renderer,
-	rect: Rect,
-	color: Maybe(Color) = nil,
-	thickness: int = 1,
-	fill: bool = false,
-) {
-	render_segments(
-		renderer,
-		{
-			{rect.x, rect.y},
-			{rect.x + rect.w, rect.y},
-			{rect.x + rect.w, rect.y + rect.h},
-			{rect.x, rect.y + rect.h},
-			{rect.x, rect.y},
-		},
-		color,
-		thickness,
-		fill,
-	)
-}
-
-render_rect :: proc(renderer: ^Renderer, rect: Rect, color: Maybe(Color) = nil) {
-	graphics_add_quad(renderer, rect, resolve_color(color))
-}
-
-render_text :: proc(
-	resources: ^Resources,
-	text: string,
-	font_handle: FontHandle,
-	font_size: u32,
-	rect: Rect,
-	color: Maybe(Color) = nil,
-) {
-	font := resources_get_font(resources, font_handle)
-	graphics_add_text(resources.gpu, text, font, font_size, rect, resolve_color(color))
-}
-
-render_texture :: proc {
-	render_texture_by_handle,
-	render_texture_by_name,
-	render_texture_by_atlas_name,
-}
-
-render_texture_by_handle :: proc(
-	renderer: ^Renderer,
-	handle: TextureHandle,
-	rect: Rect,
-	color: Maybe(Color) = nil,
-	slice_offset: Maybe(RectOffset) = nil,
-) {
-	positions: [dynamic]Position
-	uvs: [dynamic]Uv
-
-	if rslice_offset, ok := slice_offset.?; ok {
-		tex := handle_map.get(renderer.bind_table.textures, handle)
-		tw := cast(f32)tex.data->width()
-		th := cast(f32)tex.data->height()
-
-		positions = rect_to_vertices_nine_slice(rect, rslice_offset)
-		uvs = offset_to_uvs_nine_slice(rslice_offset, tw, th)
-	} else {
-		positions = rect_to_vertices_positions(rect)
-		uvs = rect_to_uvs({0, 0, 1, 1})
-	}
-
-	graphics_add_texture(renderer, handle, positions[:], uvs[:], resolve_color(color))
-}
-
-render_texture_by_name :: proc(
-	resources: ^Resources,
-	name: string,
-	rect: Rect,
-	color: Maybe(Color) = nil,
-	slice_offset: Maybe(RectOffset) = nil,
-) {
-	handle, found := resources.texture_names[name]
-	assert(found)
-
-	positions: [dynamic]Position
-	uvs: [dynamic]Uv
-
-	if rslice_offset, ok := slice_offset.?; ok {
-		tex := handle_map.get(resources.gpu.bind_table.textures, handle)
-		tw := cast(f32)tex.data->width()
-		th := cast(f32)tex.data->height()
-
-		positions = rect_to_vertices_nine_slice(rect, rslice_offset)
-		uvs = offset_to_uvs_nine_slice(rslice_offset, tw, th)
-	} else {
-		positions = rect_to_vertices_positions(rect)
-		uvs = rect_to_uvs({0, 0, 1, 1})
-	}
-
-	graphics_add_texture(resources.gpu, handle, positions[:], uvs[:], resolve_color(color))
-}
-
-render_texture_by_atlas_name :: proc(
-	resources: ^Resources,
-	atlas_handle: AtlasHandle,
-	sprite_name: string,
-	rect: Rect,
-	color: Maybe(Color) = nil,
-	slice_offset: Maybe(RectOffset) = nil,
-) {
-
-	atlas := resources_get_atlas(resources, atlas_handle)
-
-	positions: [dynamic]Position
-	uvs: []Uv
-
-	sprite, found := atlas.sprites[sprite_name]
-	if !found {
-		log.warnf("Sprite '%s' is not in atlas '%s'", sprite_name, atlas.name)
-		return
-	}
-
-	if rslice_offset, ok := slice_offset.?; ok {
-		positions = rect_to_vertices_nine_slice(rect, rslice_offset)
-		uvs = rect_to_uvs_nine_slice_atlas(
-			rslice_offset,
-			sprite.atlas_rect,
-			{atlas.size, atlas.size},
-		)[:]
-	} else {
-		positions = rect_to_vertices_positions(rect)
-		uvs = sprite.uvs
-	}
-
-	graphics_add_texture(
-		resources.gpu,
-		atlas.texture_handle,
-		positions[:],
-		uvs,
-		resolve_color(color),
-	)
-}
-
-render_cube :: proc(renderer: ^Renderer, center: [3]f32, size: f32, color: Maybe(Color) = nil) {
-	h := size * 0.5
-	corners := [8][3]f32 {
-		{-h, -h, -h},
-		{h, -h, -h},
-		{h, h, -h},
-		{-h, h, -h},
-		{-h, -h, h},
-		{h, -h, h},
-		{h, h, h},
-		{-h, h, h},
-	}
-
-	positions := make([dynamic]Position, 0, 36, context.temp_allocator)
-	for face in CUBE_FACES {
-		quad: [4]Position
-		for corner_index, i in face {
-			p := corners[corner_index] + center
-			quad[i] = Position{p.x, p.y, p.z, 1}
-		}
-		append(&positions, quad[0], quad[1], quad[2], quad[0], quad[2], quad[3])
-	}
-
-	graphics_add_mesh(renderer, positions[:], resolve_color(color))
-}
-
-renderer_resize :: proc(
-	renderer: ^Renderer,
-	logical_width, logical_height, pixel_width, pixel_height: int,
-) {
-	renderer.logical_size = {logical_width, logical_height}
+renderer_resize :: proc(renderer: ^Renderer, window_info: platform.WindowInfo) {
+	renderer.logical_size = {window_info.logical_width, window_info.logical_height}
 	for i in 0 ..< MAX_CAMERAS {
 		switch _ in renderer.cameras[i] {
-		case Camera2D:
-			renderer.cameras[i] = camera2d_create(renderer.logical_size)
-		case Camera3D:
-			c := &renderer.cameras[i].(Camera3D)
-			c.viewport.w = f32(logical_width)
-			c.viewport.h = f32(logical_height)
+		case core.Camera2D:
+			renderer.cameras[i] = core.camera2d_create(renderer.logical_size)
+		case core.Camera3D:
+			c := &renderer.cameras[i].(core.Camera3D)
+			c.viewport.w = f32(window_info.logical_width)
+			c.viewport.h = f32(window_info.logical_height)
 		}
 	}
 
 	renderer.swapchain->setDrawableSize(
-		NS.Size{cast(NS.Float)pixel_width, cast(NS.Float)pixel_height},
+		NS.Size{cast(NS.Float)window_info.pixel_width, cast(NS.Float)window_info.pixel_height},
 	)
 }
 

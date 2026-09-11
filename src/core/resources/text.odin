@@ -1,9 +1,11 @@
-package omecore
+package omeresources
 
 import "core:math"
 import "core:unicode/utf8"
 
 import STBTT "vendor:stb/truetype"
+
+import "ome:core"
 
 StringPrintableIterator :: struct {
 	s: string,
@@ -49,7 +51,7 @@ text_measure :: proc(font: ^Font, text: string, font_size: u32) -> [2]f32 {
 	return {max_x * scale, cast(f32)font_size}
 }
 
-text_fit :: proc(font: ^Font, text: string, font_size: u32, rect: Rect) -> u32 {
+text_fit :: proc(font: ^Font, text: string, font_size: u32, rect: core.Rect) -> u32 {
 	size := text_measure(font, text, font_size)
 	scale_x := rect.w / size.x
 	scale_y := rect.h / size.y

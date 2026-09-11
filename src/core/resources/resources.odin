@@ -1,17 +1,19 @@
-package omecore
+package omeresources
 
 import "base:runtime"
 import "core:strings"
+
+import "ome:core/gpu"
 import "ome:core/handle_map"
 
 Resources :: struct {
-	gpu:           ^Renderer,
+	renderer:      ^gpu.Renderer,
 	fonts:         handle_map.HandleMap(Font, FontHandle),
 	atlases:       handle_map.HandleMap(Atlas, AtlasHandle),
-	texture_names: map[string]TextureHandle,
+	texture_names: map[string]gpu.TextureHandle,
 }
 
-resources_create :: proc(gpu: ^Renderer) -> ^Resources {
+resources_create :: proc(renderer: ^gpu.Renderer) -> ^Resources {
 	resources: ^Resources = new(Resources)
 
 	font_map, fm_err := handle_map.make(Font, FontHandle)
@@ -20,10 +22,10 @@ resources_create :: proc(gpu: ^Renderer) -> ^Resources {
 	atlas_map, am_err := handle_map.make(Atlas, AtlasHandle)
 	assert(am_err == runtime.Allocator_Error.None)
 
-	resources.gpu = gpu
+	resources.renderer = renderer
 	resources.fonts = font_map
 	resources.atlases = atlas_map
-	resources.texture_names = make_map(map[string]TextureHandle)
+	resources.texture_names = make_map(map[string]gpu.TextureHandle)
 
 	return resources
 }
@@ -61,7 +63,7 @@ resources_load_atlas :: proc(
 
 	atlas := handle_map.get(resources.atlases, atlas_handle)
 
-	aerr := atlas_load(atlas, resources.gpu.bind_table, directory_path, name)
+	aerr := atlas_load(atlas, resources.renderer.bind_table, directory_path, name)
 	return atlas_handle, aerr
 }
 
@@ -73,8 +75,8 @@ resources_load_texture :: proc(
 	resources: ^Resources,
 	path: string,
 	name: string,
-) -> TextureHandle {
-	handle := texture_create(resources.gpu.bind_table, path, name)
+) -> gpu.TextureHandle {
+	handle := gpu.texture_create(resources.renderer.bind_table, path, name)
 	resources.texture_names[strings.clone(name)] = handle
 	return handle
 }
@@ -82,7 +84,7 @@ resources_load_texture :: proc(
 resources_flush :: proc(resources: ^Resources) {
 	iter := handle_map.make_iter(&resources.fonts)
 	for font in handle_map.iter(&iter) {
-		font_flush(font, resources.gpu.bind_table)
+		font_flush(font, resources.renderer.bind_table)
 	}
 }
 

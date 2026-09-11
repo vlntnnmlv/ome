@@ -1,25 +1,8 @@
-package omecore
+package omegpu
 
 import MTL "vendor:darwin/Metal"
-import STBTT "vendor:stb/truetype"
 
-Mode :: enum u32 {
-	Primitive = 0,
-	Text      = 1,
-	Texture   = 2,
-}
-
-Position :: distinct [4]f32
-Uv :: distinct [2]f32
-TexID :: distinct u32
-
-Vertex2D :: struct {
-	position: Position,
-	uv:       Uv,
-	color:    [4]f32,
-	mode:     Mode,
-	tex_id:   TexID,
-}
+import "ome:core"
 
 graphics_append_render_call :: proc(
 	renderer: ^Renderer,
@@ -44,7 +27,7 @@ graphics_append_render_call :: proc(
 graphics_add_points :: proc(
 	renderer: ^Renderer,
 	points: [][2]f32,
-	color: Color,
+	color: core.Color,
 	fill: bool = false,
 	thickness: int = 1,
 ) {
@@ -65,74 +48,11 @@ graphics_add_points :: proc(
 	graphics_append_render_call(renderer, type, start, len(vertices))
 }
 
-graphics_add_quad :: proc(renderer: ^Renderer, rect: Rect, color: Color) {
+graphics_add_quad :: proc(renderer: ^Renderer, rect: core.Rect, color: core.Color) {
 	start := len(renderer.vertices.cpu)
 	positions := rect_to_vertices_positions(rect)
 
 	vertices := vertices_positions_to_vertices(positions[:], color)
-
-	gpu_buffer_append(&renderer.vertices, vertices)
-
-	graphics_append_render_call(renderer, .Triangle, start, len(vertices))
-}
-
-graphics_add_text :: proc(
-	renderer: ^Renderer,
-	text: string,
-	font: ^Font,
-	font_size: u32,
-	rect: Rect,
-	color: Color,
-) {
-	wanted_font_size := text_fit(font, text, font_size, rect)
-	font_ensure_size(font, wanted_font_size)
-	real_font_size := font_nearest_size(font, wanted_font_size)
-
-	x := rect.x
-	y := rect.y
-
-	cap := len(text) * VERTICES_PER_QUAD
-	total_positions := make([dynamic]Position, 0, cap, context.temp_allocator)
-	total_uvs := make([dynamic]Uv, 0, cap, context.temp_allocator)
-
-	start := len(renderer.vertices.cpu)
-	it := StringPrintableIterator{text, 0}
-	for char in iterate_printable(&it) {
-		quad: STBTT.aligned_quad
-		STBTT.GetPackedQuad(
-			&font.char_data[real_font_size][0],
-			font.bitmap_size,
-			font.bitmap_size,
-			cast(i32)char - 32,
-			&x,
-			&y,
-			&quad,
-			true,
-		)
-
-		char_rect := Rect{quad.x0, quad.y0, quad.x1 - quad.x0, quad.y1 - quad.y0}
-		vertices := rect_to_vertices_positions(char_rect)
-
-		uvs := [VERTICES_PER_QUAD]Uv {
-			{quad.s0, quad.t0},
-			{quad.s0, quad.t1},
-			{quad.s1, quad.t1},
-			{quad.s0, quad.t0},
-			{quad.s1, quad.t1},
-			{quad.s1, quad.t0},
-		}
-
-		append(&total_positions, ..vertices[:])
-		append(&total_uvs, ..uvs[:])
-	}
-
-	vertices := vertices_positions_and_uvs_to_vertices(
-		total_positions[:],
-		total_uvs[:],
-		color,
-		Mode.Text,
-		TexID(font.texture.idx),
-	)
 
 	gpu_buffer_append(&renderer.vertices, vertices)
 
@@ -156,8 +76,8 @@ graphics_add_texture :: proc(
 	texture_handle: TextureHandle,
 	positions: []Position,
 	uvs: []Uv,
-	color: Color,
-	slice_offset: Maybe(RectOffset) = nil,
+	color: core.Color,
+	slice_offset: Maybe(core.RectOffset) = nil,
 ) {
 	start := len(renderer.vertices.cpu)
 
@@ -177,7 +97,7 @@ graphics_add_texture :: proc(
 graphics_add_mesh :: proc(
 	renderer: ^Renderer,
 	positions: []Position,
-	color: Color,
+	color: core.Color,
 	cull: MTL.CullMode = .Back,
 ) {
 	start := len(renderer.vertices.cpu)

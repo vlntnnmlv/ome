@@ -1,11 +1,14 @@
-package omecore
+package omeresources
 
 import "core:os"
 import "core:slice"
-import "ome:core/handle_map"
 
 import STBRP "vendor:stb/rect_pack"
 import STBTT "vendor:stb/truetype"
+
+import "ome:core"
+import "ome:core/gpu"
+import "ome:core/handle_map"
 
 INITIAL_BITMAP_SIZE :: 1024
 REFERENCE_FONT_SIZE :: 32
@@ -33,7 +36,7 @@ Font :: struct {
 	sizes:        [dynamic]u32,
 	pending:      [dynamic]u32,
 	char_data:    map[u32][]STBTT.packedchar,
-	texture:      TextureHandle,
+	texture:      gpu.TextureHandle,
 	dirty:        bool,
 }
 
@@ -129,28 +132,28 @@ font_pack_size :: proc(font: ^Font, size: u32) -> FontError {
 	return .None
 }
 
-font_flush :: proc(font: ^Font, bind_table: ^BindTable) {
+font_flush :: proc(font: ^Font, bind_table: ^gpu.BindTable) {
 	for size in font.pending do font_pack_size(font, size)
 	clear(&font.pending)
 
 	if !font.dirty do return
 
 	if !handle_map.valid(bind_table.textures, font.texture) {
-		font.texture = texture_create_from_data(
+		font.texture = gpu.texture_create_from_data(
 			bind_table,
-			TextureData {
+			gpu.TextureData {
 				name = "font",
 				pixels = raw_data(font.bitmap),
 				width = font.bitmap_size,
 				height = font.bitmap_size,
 				channels = 1,
 				in_atlas = false,
-				atlas_rect = Rect{},
+				atlas_rect = core.Rect{},
 			},
-			{.R8Unorm, 1},
+			gpu.TextureFormat{.R8Unorm, 1},
 		)
 	} else {
-		texture_write(bind_table, font.texture, raw_data(font.bitmap), {.R8Unorm, 1})
+		gpu.texture_write(bind_table, font.texture, raw_data(font.bitmap), {.R8Unorm, 1})
 	}
 
 	font.dirty = false

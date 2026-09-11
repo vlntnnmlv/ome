@@ -1,4 +1,4 @@
-package omecore
+package omegpu
 
 import "base:runtime"
 

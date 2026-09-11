@@ -1,4 +1,4 @@
-package omecore
+package omegpu
 
 import "base:runtime"
 import "core:strings"
@@ -7,6 +7,7 @@ import NS "core:sys/darwin/Foundation"
 import MTL "vendor:darwin/Metal"
 import STBI "vendor:stb/image"
 
+import "ome:core"
 import "ome:core/handle_map"
 
 MAX_TEXTURES :: 256
@@ -23,7 +24,7 @@ TextureData :: struct {
 	height:     i32,
 	channels:   i32,
 	in_atlas:   bool,
-	atlas_rect: Rect,
+	atlas_rect: core.Rect,
 }
 
 TextureHandle :: distinct handle_map.Handle
