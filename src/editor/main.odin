@@ -6,12 +6,11 @@ import "core:log"
 import "core:math"
 import "core:mem"
 
-import SDL "vendor:sdl3"
-
 import "ome:app"
 import "ome:core"
 import "ome:core/gpu"
 import "ome:core/handle_map"
+import "ome:core/platform"
 import "ome:core/render"
 import "ome:core/resources"
 import "ome:ui"
@@ -33,19 +32,19 @@ track_finish :: proc(tracking_allocator: ^mem.Tracking_Allocator) {
 	mem.tracking_allocator_destroy(tracking_allocator)
 }
 
-move_camera :: proc(app: ^app.App, key: SDL.Keycode) {
-	switch key {
-	case SDL.K_V:
+move_camera :: proc(app: ^app.App, key: platform.Key) {
+	#partial switch key {
+	case .V:
 		gpu.renderer_get_camera_2d(app.renderer, 1).zoom += 0.1
-	case SDL.K_C:
+	case .C:
 		gpu.renderer_get_camera_2d(app.renderer, 1).zoom -= 0.1
-	case SDL.K_W:
+	case .W:
 		gpu.renderer_get_camera_2d(app.renderer, 1).position.y -= 5
-	case SDL.K_A:
+	case .A:
 		gpu.renderer_get_camera_2d(app.renderer, 1).position.x -= 5
-	case SDL.K_S:
+	case .S:
 		gpu.renderer_get_camera_2d(app.renderer, 1).position.y += 5
-	case SDL.K_D:
+	case .D:
 		gpu.renderer_get_camera_2d(app.renderer, 1).position.x += 5
 	}
 }
@@ -114,12 +113,12 @@ main :: proc() {
 		viewport = {0, 0, width, height},
 	}
 
-	a.key_callbacks[SDL.K_V] = proc(a: ^app.App) {move_camera(a, SDL.K_V)}
-	a.key_callbacks[SDL.K_C] = proc(a: ^app.App) {move_camera(a, SDL.K_C)}
-	a.key_callbacks[SDL.K_W] = proc(a: ^app.App) {move_camera(a, SDL.K_W)}
-	a.key_callbacks[SDL.K_A] = proc(a: ^app.App) {move_camera(a, SDL.K_A)}
-	a.key_callbacks[SDL.K_S] = proc(a: ^app.App) {move_camera(a, SDL.K_S)}
-	a.key_callbacks[SDL.K_D] = proc(a: ^app.App) {move_camera(a, SDL.K_D)}
+	a.key_callbacks[.V] = proc(a: ^app.App) {move_camera(a, .V)}
+	a.key_callbacks[.C] = proc(a: ^app.App) {move_camera(a, .C)}
+	a.key_callbacks[.W] = proc(a: ^app.App) {move_camera(a, .W)}
+	a.key_callbacks[.A] = proc(a: ^app.App) {move_camera(a, .A)}
+	a.key_callbacks[.S] = proc(a: ^app.App) {move_camera(a, .S)}
+	a.key_callbacks[.D] = proc(a: ^app.App) {move_camera(a, .D)}
 
 	// start the event loop
 	for !a.quit {

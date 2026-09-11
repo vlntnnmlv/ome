@@ -48,23 +48,6 @@ panel_delete :: proc(scene: ^Scene, panel: ^Panel, allocator: mem.Allocator = co
 	delete(panel.children_handles)
 }
 
-// panel_process_event :: proc(
-// 	ui_panel_handle: PanelHandle,
-// 	ui_manager: ^Manager,
-// 	e: SDL.Event,
-// ) -> bool {
-// 	if e.type != .MOUSE_MOTION do return false
-
-// 	panel := &ui_manager.panels[ui_panel_handle]
-// 	child_catched := false
-// 	for child in panel.children {
-// 		child_catched = panel_process_event(child, ui_manager, e)
-// 	}
-
-// 	panel.hovered = !child_catched && core.contains(panel.rect, {e.motion.x, e.motion.y})
-// 	return panel.hovered
-// }
-
 panel_render :: proc(rsrcs: ^resources.Resources, scene: ^Scene, handle: PanelHandle) {
 	panel := handle_map.get(scene.panels, handle)
 	color := core.Color{255, 0, 0, 255}
