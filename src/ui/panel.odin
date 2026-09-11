@@ -6,7 +6,6 @@ import "core:mem"
 import "ome:core"
 import "ome:core/handle_map"
 import "ome:core/render"
-import "ome:core/resources"
 
 PanelHandle :: distinct handle_map.Handle
 
@@ -49,20 +48,20 @@ panel_delete :: proc(scene: ^Scene, panel: ^Panel, allocator: mem.Allocator = co
 	builtin.delete(panel.children_handles)
 }
 
-panel_render :: proc(rsrcs: ^resources.Assets, scene: ^Scene, handle: PanelHandle) {
+panel_render :: proc(renderer: ^render.Renderer, scene: ^Scene, handle: PanelHandle) {
 	panel := handle_map.get(scene.panels, handle)
 	color := core.Color{255, 0, 0, 255}
 	if panel.hovered do color = core.Color{0, 255, 0, 255}
 
-	render.quad(rsrcs, panel.rect, color, 1, false)
+	render.quad(renderer, panel.rect, color, 1, false)
 	switch spec in panel.spec {
 	case PanelSpec:
 		break
 	case TextSpec:
-		render.text(rsrcs, spec.text, spec.font_handle, spec.font_size, panel.rect, spec.color)
+		render.text(renderer, spec.text, spec.font_handle, spec.font_size, panel.rect, spec.color)
 	case ImageSpec:
 		render.texture_by_atlas_name(
-			rsrcs,
+			renderer,
 			spec.atlas_handle,
 			spec.sprite_name,
 			panel.rect,
@@ -72,6 +71,6 @@ panel_render :: proc(rsrcs: ^resources.Assets, scene: ^Scene, handle: PanelHandl
 	}
 
 	for child_handle in panel.children_handles {
-		panel_render(rsrcs, scene, child_handle)
+		panel_render(renderer, scene, child_handle)
 	}
 }

@@ -5,7 +5,7 @@ import "core:mem"
 
 import "ome:core"
 import "ome:core/handle_map"
-import "ome:core/resources"
+import "ome:core/render"
 
 SceneHandle :: distinct handle_map.Handle
 
@@ -63,8 +63,8 @@ scene_add_panel :: proc(
 	append(&parent.children_handles, panel_handle)
 }
 
-scene_render :: proc(rsrcs: ^resources.Assets, scene: ^Scene) {
-	panel_render(rsrcs, scene, scene.root_handle)
+scene_render :: proc(renderer: ^render.Renderer, scene: ^Scene) {
+	panel_render(renderer, scene, scene.root_handle)
 }
 
 scene_delete :: proc(scene: ^Scene, allocator: mem.Allocator = context.allocator) {

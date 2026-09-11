@@ -1,6 +1,7 @@
 package omeplatform
 
 import "core:c"
+
 import SDL "vendor:sdl3"
 
 Key :: enum {
