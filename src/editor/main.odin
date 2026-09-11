@@ -8,7 +8,6 @@ import "core:mem"
 
 import "ome:app"
 import "ome:core"
-import "ome:core/handle_map"
 import "ome:core/platform"
 import "ome:core/render"
 import "ome:core/resources"
@@ -70,11 +69,11 @@ main :: proc() {
 
 	// create UI
 	screen_rect := core.Rect{0, 0, width, height}
-	manager := ui.create()
-	defer ui.delete(&manager)
+	ui_instance := ui.create()
+	defer ui.delete(&ui_instance)
 
-	scene_handle := ui.add_scene(&manager, screen_rect, "main")
-	scene := handle_map.get(manager.scenes, scene_handle)
+	scene_handle := ui.add_scene(&ui_instance, screen_rect, "main")
+	scene := ui.get_scene(&ui_instance, scene_handle)
 	ui.scene_add_panel(
 		scene,
 		scene.root_handle,
