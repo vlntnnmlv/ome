@@ -36,18 +36,16 @@ RenderCall :: struct {
 Renderer :: struct {
 	device:               ^MTL.Device,
 	command_q:            ^MTL.CommandQueue,
-	compile_options:      ^MTL.CompileOptions,
 	pipeline_state:       ^MTL.RenderPipelineState,
 	swapchain:            ^CA.MetalLayer,
 	render_calls:         [dynamic]RenderCall,
 	clear_color:          MTL.ClearColor,
 	cameras:              [MAX_CAMERAS]Camera,
 	active_state:         RenderState,
-	texture_manager:      ^TextureManager,
+	bind_table:           ^BindTable,
 	logical_size:         [2]int,
 	vertices:             GPUBuffer(Vertex2D),
 	frame_context:        FrameContext,
-	//
 	// Internal
 	frame_slot_index:     int,
 	frame_sema:           sync.Sema,
@@ -142,21 +140,6 @@ renderer_create :: proc(
 	command_q := device->newCommandQueue()
 	compile_options := NS.new(MTL.CompileOptions)
 
-
-	// shader_file, shader_file_load_error := os.read_entire_file_from_path(
-	// 	"assets/shaders/shader.metal",
-	// 	context.temp_allocator,
-	// )
-
-	// defer delete(shader_file, context.temp_allocator)
-	// if shader_file_load_error != nil {
-	// 	log.errorf(
-	// 		"Couldn't load shader files. Error: %v",
-	// 		os.error_string(shader_file_load_error),
-	// 	)
-	// 	return nil, false
-	// }
-
 	shader_source, ok := shader_compile_slang("assets/shaders/shader.slang")
 	if !ok {
 		return nil, false
@@ -231,7 +214,7 @@ renderer_create :: proc(
 		clear_color.a,
 	}
 
-	renderer.texture_manager = texture_manager_create(renderer.device, fragment_program)
+	renderer.bind_table = bind_table_create(renderer.device, fragment_program)
 
 	sync.sema_post(&renderer.frame_sema, GPU_BUFFERS_RING_SIZE)
 	renderer.frame_complete_block, _ = NS.Block.createGlobal(
@@ -296,10 +279,10 @@ renderer_flush :: proc(renderer: ^Renderer) {
 		1,
 	)
 
-	renderer.frame_context.encoder->setFragmentBuffer(renderer.texture_manager.arguments, 0, 0)
-	if len(renderer.texture_manager.resources) > 0 {
+	renderer.frame_context.encoder->setFragmentBuffer(renderer.bind_table.arguments, 0, 0)
+	if len(renderer.bind_table.resources) > 0 {
 		renderer.frame_context.encoder->useResourcesStages(
-			renderer.texture_manager.resources[:],
+			renderer.bind_table.resources[:],
 			{.Read},
 			{.Fragment},
 		)
@@ -452,7 +435,7 @@ render_texture_by_handle :: proc(
 	uvs: [dynamic]Uv
 
 	if rslice_offset, ok := slice_offset.?; ok {
-		tex := handle_map.get(renderer.texture_manager.textures, handle)
+		tex := handle_map.get(renderer.bind_table.textures, handle)
 		tw := cast(f32)tex.data->width()
 		th := cast(f32)tex.data->height()
 
@@ -480,7 +463,7 @@ render_texture_by_name :: proc(
 	uvs: [dynamic]Uv
 
 	if rslice_offset, ok := slice_offset.?; ok {
-		tex := handle_map.get(resources.gpu.texture_manager.textures, handle)
+		tex := handle_map.get(resources.gpu.bind_table.textures, handle)
 		tw := cast(f32)tex.data->width()
 		th := cast(f32)tex.data->height()
 
@@ -510,8 +493,6 @@ render_texture_by_atlas_name :: proc(
 	sprite: SpriteData = atlas.sprites[name]
 
 	if rslice_offset, ok := slice_offset.?; ok {
-		// tex := renderer.texture_manager.textures[handle]
-
 		positions = rect_to_vertices_nine_slice(rect, rslice_offset)
 		uvs = rect_to_uvs_nine_slice_atlas(
 			rslice_offset,
@@ -580,8 +561,8 @@ renderer_delete :: proc(renderer: ^Renderer) {
 
 	// font_delete(&renderer.font)
 
-	texture_manager_delete(renderer.texture_manager)
-	free(renderer.texture_manager)
+	bind_table_delete(renderer.bind_table)
+	free(renderer.bind_table)
 
 	delete(renderer.render_calls)
 	gpu_buffer_delete(&renderer.vertices)

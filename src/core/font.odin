@@ -129,15 +129,15 @@ font_pack_size :: proc(font: ^Font, size: u32) -> FontError {
 	return .None
 }
 
-font_flush :: proc(font: ^Font, texture_manager: ^TextureManager) {
+font_flush :: proc(font: ^Font, bind_table: ^BindTable) {
 	for size in font.pending do font_pack_size(font, size)
 	clear(&font.pending)
 
 	if !font.dirty do return
 
-	if !handle_map.valid(texture_manager.textures, font.texture) {
+	if !handle_map.valid(bind_table.textures, font.texture) {
 		font.texture = texture_create_from_data(
-			texture_manager,
+			bind_table,
 			TextureData {
 				name = "font",
 				pixels = raw_data(font.bitmap),
@@ -150,7 +150,7 @@ font_flush :: proc(font: ^Font, texture_manager: ^TextureManager) {
 			{.R8Unorm, 1},
 		)
 	} else {
-		texture_write(texture_manager, font.texture, raw_data(font.bitmap), {.R8Unorm, 1})
+		texture_write(bind_table, font.texture, raw_data(font.bitmap), {.R8Unorm, 1})
 	}
 
 	font.dirty = false

@@ -29,7 +29,7 @@ TextureData :: struct {
 TextureHandle :: distinct handle_map.Handle
 
 texture_create :: proc(
-	texture_manager: ^TextureManager,
+	bind_table: ^BindTable,
 	path: string,
 	name: string,
 	format: TextureFormat = {.RGBA8Unorm_sRGB, 4},
@@ -49,7 +49,7 @@ texture_create :: proc(
 		name     = name,
 	}
 
-	return texture_create_from_data(texture_manager, texture_data, format)
+	return texture_create_from_data(bind_table, texture_data, format)
 }
 
 TextureFormat :: struct {
@@ -58,7 +58,7 @@ TextureFormat :: struct {
 }
 
 texture_create_from_data :: proc(
-	texture_manager: ^TextureManager,
+	bind_table: ^BindTable,
 	texture_data: TextureData,
 	format: TextureFormat = {.RGBA8Unorm_sRGB, 4},
 ) -> TextureHandle {
@@ -71,7 +71,7 @@ texture_create_from_data :: proc(
 	desc->setStorageMode(.Shared)
 	desc->setUsage({.ShaderRead})
 
-	texture := texture_manager.device->newTextureWithDescriptor(desc)
+	texture := bind_table.device->newTextureWithDescriptor(desc)
 	region := MTL.Region {
 		origin = {0, 0, 0},
 		size   = {cast(NS.Integer)texture_data.width, cast(NS.Integer)texture_data.height, 1},
@@ -83,21 +83,21 @@ texture_create_from_data :: proc(
 		cast(NS.UInteger)(texture_data.width * format.channels),
 	)
 
-	handle, err := handle_map.add(&texture_manager.textures, Texture{data = texture})
+	handle, err := handle_map.add(&bind_table.textures, Texture{data = texture})
 	assert(err == runtime.Allocator_Error.None)
 
-	texture_manager_rebuild(texture_manager)
+	bind_table_rebuild(bind_table)
 
 	return handle
 }
 
 texture_write :: proc(
-	tm: ^TextureManager,
+	bind_table: ^BindTable,
 	handle: TextureHandle,
 	pixels: [^]byte,
 	format: TextureFormat,
 ) {
-	texture := handle_map.get(tm.textures, handle)
+	texture := handle_map.get(bind_table.textures, handle)
 	if texture == nil do return
 
 	w := texture.data->width()
@@ -109,22 +109,14 @@ texture_write :: proc(
 	texture.data->replaceRegion(region, 0, pixels, w * cast(NS.UInteger)format.channels)
 }
 
-// texture_find_by_name :: proc(tm: ^TextureManager, name: string) -> (TextureHandle, bool) {
-// 	it := handle_map.make_iter(&tm.textures)
-// 	for texture in handle_map.iter(&it) {
-// 		if texture.name == name do return texture.handle, true
-// 	}
-// 	return {}, false
-// }
-
-texture_destroy :: proc(tm: ^TextureManager, handle: TextureHandle) {
-	texture := handle_map.get(tm.textures, handle)
+texture_destroy :: proc(bind_table: ^BindTable, handle: TextureHandle) {
+	texture := handle_map.get(bind_table.textures, handle)
 	if texture == nil {
 		return
 	}
 
 	texture.data->release()
-	handle_map.remove(&tm.textures, handle)
+	handle_map.remove(&bind_table.textures, handle)
 
-	texture_manager_rebuild(tm)
+	bind_table_rebuild(bind_table)
 }

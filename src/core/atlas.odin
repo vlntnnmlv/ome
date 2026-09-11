@@ -35,7 +35,7 @@ sprite_atlas_load :: proc {
 
 sprite_atlas_load_from_directory :: proc(
 	atlas: ^Atlas,
-	texture_manager: ^TextureManager,
+	bind_table: ^BindTable,
 	directory_path: string,
 	atlas_name: string,
 ) -> AtlasError {
@@ -46,12 +46,12 @@ sprite_atlas_load_from_directory :: proc(
 		delete(names)
 	}
 
-	return sprite_atlas_load_from_files(atlas, texture_manager, names[:], atlas_name)
+	return sprite_atlas_load_from_files(atlas, bind_table, names[:], atlas_name)
 }
 
 sprite_atlas_load_from_files :: proc(
 	atlas: ^Atlas,
-	texture_manager: ^TextureManager,
+	bind_table: ^BindTable,
 	paths: []string,
 	name: string,
 ) -> AtlasError {
@@ -135,11 +135,7 @@ sprite_atlas_load_from_files :: proc(
 		name     = name,
 	}
 
-	handle: TextureHandle = sprite_atlas_build_texture(
-		texture_manager,
-		textures_data[:],
-		atlas_data,
-	)
+	handle: TextureHandle = sprite_atlas_build_texture(bind_table, textures_data[:], atlas_data)
 	atlas.texture_handle = handle
 	atlas.sprites = sprites
 	atlas.size = f32(atlas_size)
@@ -148,7 +144,7 @@ sprite_atlas_load_from_files :: proc(
 }
 
 sprite_atlas_build_texture :: proc(
-	texture_manager: ^TextureManager,
+	bind_table: ^BindTable,
 	textures_data: []TextureData,
 	atlas_data: TextureData,
 ) -> TextureHandle {
@@ -168,7 +164,7 @@ sprite_atlas_build_texture :: proc(
 		}
 	}
 
-	handle := texture_create_from_data(texture_manager, atlas_data)
+	handle := texture_create_from_data(bind_table, atlas_data)
 
 	return handle
 }

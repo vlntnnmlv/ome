@@ -114,7 +114,7 @@ app_process_events :: proc(app: ^App) { 	// , ui_manager: ^UIManager) {
 		case .DROP_FILE:
 			drop := e.drop
 			fmt.println(drop.data)
-			texture_create(app.renderer.texture_manager, string(drop.data), "tmp")
+			texture_create(app.renderer.bind_table, string(drop.data), "tmp")
 		case .KEY_DOWN:
 			if e.key.key == SDL.K_ESCAPE {
 				app.quit = true

@@ -61,7 +61,7 @@ resources_load_atlas :: proc(
 
 	atlas := handle_map.get(resources.atlases, atlas_handle)
 
-	aerr := sprite_atlas_load(atlas, resources.gpu.texture_manager, directory_path, name)
+	aerr := sprite_atlas_load(atlas, resources.gpu.bind_table, directory_path, name)
 	return atlas_handle, aerr
 }
 
@@ -74,7 +74,7 @@ resources_load_texture :: proc(
 	path: string,
 	name: string,
 ) -> TextureHandle {
-	handle := texture_create(resources.gpu.texture_manager, path, name)
+	handle := texture_create(resources.gpu.bind_table, path, name)
 	resources.texture_names[strings.clone(name)] = handle
 	return handle
 }
@@ -82,7 +82,7 @@ resources_load_texture :: proc(
 resources_flush :: proc(resources: ^Resources) {
 	iter := handle_map.make_iter(&resources.fonts)
 	for font in handle_map.iter(&iter) {
-		font_flush(font, resources.gpu.texture_manager)
+		font_flush(font, resources.gpu.bind_table)
 	}
 }
 
