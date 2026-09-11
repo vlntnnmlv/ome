@@ -466,22 +466,18 @@ render_texture_by_handle :: proc(
 }
 
 render_texture_by_name :: proc(
-	renderer: ^Renderer,
+	resources: ^Resources,
 	name: string,
 	rect: Rect,
 	color: Maybe(Color) = nil,
 	slice_offset: Maybe(RectOffset) = nil,
 ) {
-	handle, found := texture_find_by_name(renderer.texture_manager, name)
-	if !found {
-		return
-	}
-
+	handle := resources.texture_names[name]
 	positions: [dynamic]Position
 	uvs: [dynamic]Uv
 
 	if rslice_offset, ok := slice_offset.?; ok {
-		tex := handle_map.get(renderer.texture_manager.textures, handle)
+		tex := handle_map.get(resources.gpu.texture_manager.textures, handle)
 		tw := cast(f32)tex.data->width()
 		th := cast(f32)tex.data->height()
 
@@ -492,18 +488,18 @@ render_texture_by_name :: proc(
 		uvs = rect_to_uvs({0, 0, 1, 1})
 	}
 
-	graphics_add_texture(renderer, handle, positions[:], uvs[:], resolve_color(color))
+	graphics_add_texture(resources.gpu, handle, positions[:], uvs[:], resolve_color(color))
 }
 
 render_texture_by_atlas_name :: proc(
 	renderer: ^Renderer,
-	atlas: SpriteAtlas,
+	atlas: Atlas,
 	name: string,
 	rect: Rect,
 	color: Maybe(Color) = nil,
 	slice_offset: Maybe(RectOffset) = nil,
 ) {
-	handle := atlas.handle
+	handle := atlas.texture_handle
 
 	positions: [dynamic]Position
 	uvs: []Uv

@@ -14,7 +14,6 @@ MAX_TEXTURES :: 256
 Texture :: struct {
 	handle: TextureHandle,
 	data:   ^MTL.Texture,
-	name:   string,
 }
 
 TextureData :: struct {
@@ -84,10 +83,7 @@ texture_create_from_data :: proc(
 		cast(NS.UInteger)(texture_data.width * format.channels),
 	)
 
-	handle, err := handle_map.add(
-		&texture_manager.textures,
-		Texture{data = texture, name = strings.clone(texture_data.name)},
-	)
+	handle, err := handle_map.add(&texture_manager.textures, Texture{data = texture})
 	assert(err == runtime.Allocator_Error.None)
 
 	texture_manager_rebuild(texture_manager)
@@ -113,13 +109,13 @@ texture_write :: proc(
 	texture.data->replaceRegion(region, 0, pixels, w * cast(NS.UInteger)format.channels)
 }
 
-texture_find_by_name :: proc(tm: ^TextureManager, name: string) -> (TextureHandle, bool) {
-	it := handle_map.make_iter(&tm.textures)
-	for texture in handle_map.iter(&it) {
-		if texture.name == name do return texture.handle, true
-	}
-	return {}, false
-}
+// texture_find_by_name :: proc(tm: ^TextureManager, name: string) -> (TextureHandle, bool) {
+// 	it := handle_map.make_iter(&tm.textures)
+// 	for texture in handle_map.iter(&it) {
+// 		if texture.name == name do return texture.handle, true
+// 	}
+// 	return {}, false
+// }
 
 texture_destroy :: proc(tm: ^TextureManager, handle: TextureHandle) {
 	texture := handle_map.get(tm.textures, handle)
@@ -128,7 +124,6 @@ texture_destroy :: proc(tm: ^TextureManager, handle: TextureHandle) {
 	}
 
 	texture.data->release()
-	delete(texture.name)
 	handle_map.remove(&tm.textures, handle)
 
 	texture_manager_rebuild(tm)

@@ -64,22 +64,23 @@ panel_delete :: proc(scene: ^Scene, panel: ^Panel, allocator: mem.Allocator = co
 // 	return panel.hovered
 // }
 
-panel_render :: proc(renderer: ^core.Renderer, scene: ^Scene, handle: PanelHandle) {
+panel_render :: proc(resources: ^core.Resources, scene: ^Scene, handle: PanelHandle) {
 	panel := handle_map.get(scene.panels, handle)
 	color := core.Color{255, 0, 0, 255}
 	if panel.hovered do color = core.Color{0, 255, 0, 255}
 
-	core.render_quad(renderer, panel.rect, color, 1, false)
+	core.render_quad(resources.gpu, panel.rect, color, 1, false)
 	switch spec in panel.spec {
 	case PanelSpec:
 		break
 	case TextSpec:
-		core.render_text(renderer, spec.text, spec.font, spec.font_size, panel.rect, spec.color)
+		font: ^core.Font = core.resources_get_font(resources, spec.font_handle)
+		core.render_text(resources.gpu, spec.text, font, spec.font_size, panel.rect, spec.color)
 	case ImageSpec:
-		core.render_texture(renderer, spec.texture_handle, panel.rect, spec.color)
+		core.render_texture(resources.gpu, spec.texture_handle, panel.rect, spec.color)
 	}
 
 	for child_handle in panel.children_handles {
-		panel_render(renderer, scene, child_handle)
+		panel_render(resources, scene, child_handle)
 	}
 }

@@ -70,7 +70,6 @@ texture_manager_delete :: proc(texture_manager: ^TextureManager) {
 	it := handle_map.make_iter(&texture_manager.textures)
 	for texture in handle_map.iter(&it) {
 		texture.data->release()
-		delete(texture.name)
 	}
 
 	handle_map.delete(&texture_manager.textures)

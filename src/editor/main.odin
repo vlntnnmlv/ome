@@ -65,16 +65,20 @@ main :: proc() {
 	if !ok do return
 	defer core.app_close(app)
 
-	// load assets
-	font: ^core.Font = new(core.Font)
-	defer {
-		core.font_delete(font)
-		free(font)
+	// resources
+	resources := core.resources_create(app.renderer)
+	defer
+	{
+		core.resources_delete(resources)
+		free(resources)
 	}
 
-	core.font_load(font, "assets/fonts/Iosevka.ttf", {32, 64})
-	atlas := core.sprite_atlas_create(app.renderer, "assets/textures/", "main_atlas")
-	defer core.sprite_atlas_destroy(&atlas)
+	font_handle, ferr := core.resources_load_font(resources, "assets/fonts/Iosevka.ttf", {32, 64})
+	assert(ferr == core.FontError.None)
+
+	atlas_handle, aerr := core.resources_load_atlas(resources, "assets/textures/", "main_atlas")
+	assert(aerr == core.AtlasError.None)
+	atlas := core.resources_get_atlas(resources, atlas_handle)
 
 	// create UI
 	screen_rect := core.Rect{0, 0, width, height}
@@ -90,7 +94,7 @@ main :: proc() {
 		{width / 2 - 50, height / 2 - 50, 100, 100},
 		ui.ImageSpec {
 			color = core.Color{255, 255, 255, 255},
-			texture_handle = atlas.handle,
+			texture_handle = atlas.texture_handle,
 			slice_offset = {0, 0, 0, 0},
 		},
 	)
@@ -117,7 +121,7 @@ main :: proc() {
 	for !app.quit {
 		core.app_process_events(app)
 
-		core.font_flush(font, app.renderer.texture_manager)
+		core.resources_flush(resources)
 		core.app_pre_render(app)
 
 		core.renderer_set_camera(app.renderer, 2)
@@ -126,11 +130,11 @@ main :: proc() {
 		core.render_quad(app.renderer, {400, 400, 30, 30}, core.Color{244, 244, 244, 255})
 		core.renderer_set_camera(app.renderer, 0)
 
-		ui.scene_render(app.renderer, scene)
+		ui.scene_render(resources, scene)
 		core.render_text(
 			app.renderer,
 			"HeLLO",
-			font,
+			core.resources_get_font(resources, font_handle),
 			77,
 			{100, 100, 500, 500},
 			core.Color{0, 0, 255, 255},

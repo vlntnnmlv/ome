@@ -20,7 +20,10 @@ FontError :: enum {
 	Packing_Error,
 }
 
+FontHandle :: distinct handle_map.Handle
+
 Font :: struct {
+	handle:       FontHandle,
 	path:         string,
 	data:         []u8,
 	info:         STBTT.fontinfo,
@@ -32,19 +35,6 @@ Font :: struct {
 	char_data:    map[u32][]STBTT.packedchar,
 	texture:      TextureHandle,
 	dirty:        bool,
-}
-
-FontManager :: struct {
-	fonts: [dynamic]^Font,
-}
-
-FontHandle :: distinct u32
-
-font_manager_create :: proc() -> ^FontManager {
-	font_manager := new(FontManager)
-	font_manager.fonts = make([dynamic]^Font)
-
-	return font_manager
 }
 
 font_load :: proc(font: ^Font, path: string, sizes: []u32 = {}) -> FontError {

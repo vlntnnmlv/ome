@@ -26,6 +26,6 @@ ImageSpec :: struct {
 TextSpec :: struct {
 	using panel: PanelSpec,
 	text:        string,
-	font:        ^core.Font,
+	font_handle: core.FontHandle,
 	font_size:   u32,
 }

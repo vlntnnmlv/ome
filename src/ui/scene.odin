@@ -62,8 +62,8 @@ scene_add_panel :: proc(
 	append(&parent.children_handles, panel_handle)
 }
 
-scene_render :: proc(renderer: ^core.Renderer, scene: ^Scene) {
-	panel_render(renderer, scene, scene.root_handle)
+scene_render :: proc(resources: ^core.Resources, scene: ^Scene) {
+	panel_render(resources, scene, scene.root_handle)
 }
 
 scene_delete :: proc(scene: ^Scene, allocator: mem.Allocator = context.allocator) {
