@@ -132,9 +132,9 @@ main :: proc() {
 
 		ui.scene_render(resources, scene)
 		core.render_text(
-			app.renderer,
+			resources,
 			"HeLLO",
-			core.resources_get_font(resources, font_handle),
+			font_handle,
 			77,
 			{100, 100, 500, 500},
 			core.Color{0, 0, 255, 255},

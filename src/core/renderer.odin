@@ -424,14 +424,15 @@ render_rect :: proc(renderer: ^Renderer, rect: Rect, color: Maybe(Color) = nil) 
 }
 
 render_text :: proc(
-	renderer: ^Renderer,
+	resources: ^Resources,
 	text: string,
-	font: ^Font,
+	font_handle: FontHandle,
 	font_size: u32,
 	rect: Rect,
 	color: Maybe(Color) = nil,
 ) {
-	graphics_add_text(renderer, text, font, font_size, rect, resolve_color(color))
+	font := resources_get_font(resources, font_handle)
+	graphics_add_text(resources.gpu, text, font, font_size, rect, resolve_color(color))
 }
 
 render_texture :: proc {
@@ -472,7 +473,9 @@ render_texture_by_name :: proc(
 	color: Maybe(Color) = nil,
 	slice_offset: Maybe(RectOffset) = nil,
 ) {
-	handle := resources.texture_names[name]
+	handle, found := resources.texture_names[name]
+	assert(found)
+
 	positions: [dynamic]Position
 	uvs: [dynamic]Uv
 

@@ -74,8 +74,14 @@ panel_render :: proc(resources: ^core.Resources, scene: ^Scene, handle: PanelHan
 	case PanelSpec:
 		break
 	case TextSpec:
-		font: ^core.Font = core.resources_get_font(resources, spec.font_handle)
-		core.render_text(resources.gpu, spec.text, font, spec.font_size, panel.rect, spec.color)
+		core.render_text(
+			resources,
+			spec.text,
+			spec.font_handle,
+			spec.font_size,
+			panel.rect,
+			spec.color,
+		)
 	case ImageSpec:
 		core.render_texture(resources.gpu, spec.texture_handle, panel.rect, spec.color)
 	}
