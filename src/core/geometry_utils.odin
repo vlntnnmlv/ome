@@ -113,18 +113,21 @@ rect_to_uvs_nine_slice_atlas :: proc(
 	atlas_size: [2]f32,
 	allocator: mem.Allocator = context.temp_allocator,
 ) -> [dynamic]Uv {
+	uv_rect := Rect {
+		rect.x / atlas_size.x,
+		rect.y / atlas_size.y,
+		rect.w / atlas_size.x,
+		rect.h / atlas_size.y,
+	}
 	relative_offset := RectOffset {
-		offset.left / rect.w,
-		offset.right / rect.w,
-		offset.top / rect.h,
-		offset.bottom / rect.h,
+		offset.left / atlas_size.x,
+		offset.right / atlas_size.x,
+		offset.top / atlas_size.y,
+		offset.bottom / atlas_size.y,
 	}
 
-	tl := Uv{rect.x / atlas_size.x, rect.y / atlas_size.y}
-	br := Uv{(rect.x + rect.w) / atlas_size.x, (rect.y + rect.h) / atlas_size.y}
-
-	uvs := make([dynamic]Uv, VERTICES_PER_NINE_SLICED_QUAD, context.temp_allocator)
-	for cell, i in rect_split_to_grid({tl.x, tl.y, br.x, br.y}, relative_offset) {
+	uvs := make([dynamic]Uv, VERTICES_PER_NINE_SLICED_QUAD, allocator)
+	for cell, i in rect_split_to_grid(uv_rect, relative_offset) {
 		rect_uvs := rect_to_uvs(cell)
 		copy(uvs[i * VERTICES_PER_QUAD:], rect_uvs[:])
 	}

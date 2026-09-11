@@ -18,9 +18,10 @@ ButtonSpec :: struct {
 }
 
 ImageSpec :: struct {
-	using panel:    PanelSpec,
-	texture_handle: core.TextureHandle,
-	slice_offset:   core.RectOffset,
+	using panel:  PanelSpec,
+	atlas_handle: core.AtlasHandle,
+	sprite_name:  string,
+	slice_offset: core.RectOffset,
 }
 
 TextSpec :: struct {

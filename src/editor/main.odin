@@ -76,9 +76,8 @@ main :: proc() {
 	font_handle, ferr := core.resources_load_font(resources, "assets/fonts/Iosevka.ttf", {32, 64})
 	assert(ferr == core.FontError.None)
 
-	atlas_handle, aerr := core.resources_load_atlas(resources, "assets/textures/", "main_atlas")
+	atlas_handle, aerr := core.resources_load_atlas(resources, "assets/textures/ui", "ui_atlas")
 	assert(aerr == core.AtlasError.None)
-	atlas := core.resources_get_atlas(resources, atlas_handle)
 
 	// create UI
 	screen_rect := core.Rect{0, 0, width, height}
@@ -94,8 +93,9 @@ main :: proc() {
 		{width / 2 - 50, height / 2 - 50, 100, 100},
 		ui.ImageSpec {
 			color = core.Color{255, 255, 255, 255},
-			texture_handle = atlas.texture_handle,
-			slice_offset = {0, 0, 0, 0},
+			atlas_handle = atlas_handle,
+			sprite_name = "frame",
+			slice_offset = {8, 8, 8, 8},
 		},
 	)
 

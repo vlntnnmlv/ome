@@ -61,7 +61,7 @@ resources_load_atlas :: proc(
 
 	atlas := handle_map.get(resources.atlases, atlas_handle)
 
-	aerr := sprite_atlas_load(atlas, resources.gpu.bind_table, directory_path, name)
+	aerr := atlas_load(atlas, resources.gpu.bind_table, directory_path, name)
 	return atlas_handle, aerr
 }
 
@@ -98,7 +98,7 @@ resources_delete :: proc(resources: ^Resources) {
 
 	aiter := handle_map.make_iter(&resources.atlases)
 	for atlas in handle_map.iter(&aiter) {
-		sprite_atlas_destroy(atlas)
+		atlas_destroy(atlas)
 	}
 
 	delete_map(resources.texture_names)

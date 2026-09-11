@@ -478,19 +478,24 @@ render_texture_by_name :: proc(
 }
 
 render_texture_by_atlas_name :: proc(
-	renderer: ^Renderer,
-	atlas: Atlas,
-	name: string,
+	resources: ^Resources,
+	atlas_handle: AtlasHandle,
+	sprite_name: string,
 	rect: Rect,
 	color: Maybe(Color) = nil,
 	slice_offset: Maybe(RectOffset) = nil,
 ) {
-	handle := atlas.texture_handle
+
+	atlas := resources_get_atlas(resources, atlas_handle)
 
 	positions: [dynamic]Position
 	uvs: []Uv
 
-	sprite: SpriteData = atlas.sprites[name]
+	sprite, found := atlas.sprites[sprite_name]
+	if !found {
+		log.warnf("Sprite '%s' is not in atlas '%s'", sprite_name, atlas.name)
+		return
+	}
 
 	if rslice_offset, ok := slice_offset.?; ok {
 		positions = rect_to_vertices_nine_slice(rect, rslice_offset)
@@ -504,7 +509,13 @@ render_texture_by_atlas_name :: proc(
 		uvs = sprite.uvs
 	}
 
-	graphics_add_texture(renderer, handle, positions[:], uvs, resolve_color(color))
+	graphics_add_texture(
+		resources.gpu,
+		atlas.texture_handle,
+		positions[:],
+		uvs,
+		resolve_color(color),
+	)
 }
 
 render_cube :: proc(renderer: ^Renderer, center: [3]f32, size: f32, color: Maybe(Color) = nil) {

@@ -19,6 +19,7 @@ AtlasHandle :: distinct handle_map.Handle
 Atlas :: struct {
 	handle:         AtlasHandle,
 	texture_handle: TextureHandle,
+	name:           string,
 	sprites:        map[string](SpriteData),
 	size:           f32,
 }
@@ -28,12 +29,12 @@ SpriteData :: struct {
 	atlas_rect: Rect,
 }
 
-sprite_atlas_load :: proc {
-	sprite_atlas_load_from_directory,
-	sprite_atlas_load_from_files,
+atlas_load :: proc {
+	atlas_load_from_directory,
+	atlas_load_from_files,
 }
 
-sprite_atlas_load_from_directory :: proc(
+atlas_load_from_directory :: proc(
 	atlas: ^Atlas,
 	bind_table: ^BindTable,
 	directory_path: string,
@@ -46,10 +47,10 @@ sprite_atlas_load_from_directory :: proc(
 		delete(names)
 	}
 
-	return sprite_atlas_load_from_files(atlas, bind_table, names[:], atlas_name)
+	return atlas_load_from_files(atlas, bind_table, names[:], atlas_name)
 }
 
-sprite_atlas_load_from_files :: proc(
+atlas_load_from_files :: proc(
 	atlas: ^Atlas,
 	bind_table: ^BindTable,
 	paths: []string,
@@ -135,15 +136,16 @@ sprite_atlas_load_from_files :: proc(
 		name     = name,
 	}
 
-	handle: TextureHandle = sprite_atlas_build_texture(bind_table, textures_data[:], atlas_data)
+	handle: TextureHandle = atlas_build_texture(bind_table, textures_data[:], atlas_data)
 	atlas.texture_handle = handle
 	atlas.sprites = sprites
 	atlas.size = f32(atlas_size)
+	atlas.name = strings.clone(atlas_data.name)
 
 	return .None
 }
 
-sprite_atlas_build_texture :: proc(
+atlas_build_texture :: proc(
 	bind_table: ^BindTable,
 	textures_data: []TextureData,
 	atlas_data: TextureData,
@@ -169,11 +171,12 @@ sprite_atlas_build_texture :: proc(
 	return handle
 }
 
-sprite_atlas_destroy :: proc(sprite_atlas: ^Atlas) {
-	for name, sprite in sprite_atlas.sprites {
+atlas_destroy :: proc(atlas: ^Atlas) {
+	for name, sprite in atlas.sprites {
 		delete(name)
 		delete(sprite.uvs)
 	}
 
-	delete_map(sprite_atlas.sprites)
+	delete_map(atlas.sprites)
+	delete(atlas.name)
 }

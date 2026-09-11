@@ -83,7 +83,14 @@ panel_render :: proc(resources: ^core.Resources, scene: ^Scene, handle: PanelHan
 			spec.color,
 		)
 	case ImageSpec:
-		core.render_texture(resources.gpu, spec.texture_handle, panel.rect, spec.color)
+		core.render_texture_by_atlas_name(
+			resources,
+			spec.atlas_handle,
+			spec.sprite_name,
+			panel.rect,
+			spec.color,
+			spec.slice_offset,
+		)
 	}
 
 	for child_handle in panel.children_handles {
