@@ -12,12 +12,13 @@ App :: struct {
 	renderer:      ^render.Renderer,
 	key_callbacks: map[platform.Key]KeyCallback,
 	quit:          bool,
+	frame_open:    bool,
 	time_manager:  core.TimeManager,
 }
 
 KeyCallback :: proc(ctx: ^App)
 
-app_create :: proc(
+create :: proc(
 	title: cstring,
 	logical_width, logical_height: i32,
 	clear_color: core.Color = {0, 34, 44, 255},
@@ -53,7 +54,8 @@ app_create :: proc(
 	return app, true
 }
 
-app_process_events :: proc(app: ^App) { 	// , ui_manager: ^UIManager) {
+@(private)
+process_events :: proc(app: ^App) {
 	core.time_manager_capture_frame_start(&app.time_manager)
 
 	for event in platform.poll_event(app.window) {
@@ -73,20 +75,30 @@ app_process_events :: proc(app: ^App) { 	// , ui_manager: ^UIManager) {
 	}
 }
 
-app_pre_render :: proc(app: ^App) {
-	render.begin(app.renderer)
-}
-
-app_render :: proc(app: ^App) {
+@(private)
+frame_close :: proc(app: ^App) {
 	render.flush(app.renderer)
-}
-
-app_submit :: proc(app: ^App) {
 	render.present(app.renderer)
 	core.time_manager_update(&app.time_manager)
+
+	free_all(context.temp_allocator)
+	app.frame_open = false
 }
 
-app_close :: proc(app: ^App) {
+frame :: proc(app: ^App) -> bool {
+	if app.frame_open do frame_close(app)
+
+	process_events(app)
+	if app.quit do return false
+
+	render.begin(app.renderer)
+	app.frame_open = true
+	return app.frame_open
+}
+
+close :: proc(app: ^App) {
+	if app.frame_open do frame_close(app)
+
 	render.delete(app.renderer)
 	platform.window_destroy(app.window)
 	free(app)
