@@ -2,9 +2,9 @@ package omeui
 
 import "base:builtin"
 import "core:encoding/json"
-import "core:io"
 import "core:log"
 import "core:mem"
+import "core:strings"
 
 import "ome:core"
 import "ome:handle_map"
@@ -41,10 +41,29 @@ panel_create :: proc(
 	name: string,
 	rect: core.Rect,
 	spec: Spec,
+	allocator := context.allocator,
+) -> Panel {
+	return panel_create_raw(
+		parent_handle = parent_handle,
+		uuid = core.uuid_create(allocator),
+		name = strings.clone(name, allocator),
+		rect = rect,
+		spec = spec_clone(spec, allocator),
+		allocator = allocator,
+	)
+}
+
+@(private)
+panel_create_raw :: proc(
+	uuid: string,
+	parent_handle: PanelHandle,
+	name: string,
+	rect: core.Rect,
+	spec: Spec,
 	allocator: mem.Allocator = context.allocator,
 ) -> Panel {
 	return Panel {
-		uuid = core.uuid_create(allocator),
+		uuid = uuid,
 		parent_handle = parent_handle,
 		children_handles = make([dynamic]PanelHandle, allocator),
 		name = name,
@@ -53,7 +72,7 @@ panel_create :: proc(
 	}
 }
 
-@(private)
+// @(private)
 panel_flatten :: proc(
 	scene: ^Scene,
 	handle: PanelHandle,
@@ -70,7 +89,7 @@ panel_flatten :: proc(
 	}
 
 	for child_handle in panel.children_handles {
-		child_flat := panel_flatten(scene, child_handle)
+		child_flat := panel_flatten(scene, child_handle, allocator)
 		append(&panel_flat.children, child_flat)
 	}
 
@@ -83,18 +102,54 @@ panel_serialize :: proc(
 	allocator: mem.Allocator = context.allocator,
 ) -> string {
 	panel_flat := panel_flatten(scene, handle, allocator)
-	defer delete(panel_flat.children)
+	defer panel_flat_destroy(panel_flat)
 
 	data, err := json.marshal(panel_flat, json.Marshal_Options{pretty = true}, allocator)
-	if err != json.Marshal_Data_Error.None || err != io.Error.None {
-		log.warn("Serialization of panel '%s' failed with error: %s", panel_flat.name, err)
+	if err != nil {
+		log.warnf("Serialization of panel '%s' failed with error: %s", panel_flat.name, err)
 	}
 
 	return string(data)
 }
 
-panel_unflatten :: proc(scene: ^Scene, panel_flat: PanelFlat) {
+@(private)
+panel_flat_destroy :: proc(panel_flat: PanelFlat) {
+	for child in panel_flat.children {
+		panel_flat_destroy(child)
+	}
+	builtin.delete(panel_flat.children)
+}
 
+panel_unflatten :: proc(
+	scene: ^Scene,
+	parent_handle: PanelHandle,
+	panel_flat: PanelFlat,
+	allocator: mem.Allocator = context.allocator,
+) -> PanelHandle {
+	panel := panel_create_raw(
+		strings.clone(panel_flat.uuid, allocator),
+		parent_handle,
+		strings.clone(panel_flat.name, allocator),
+		panel_flat.rect,
+		spec_clone(panel_flat.spec, allocator),
+		allocator,
+	)
+
+	handle, err := handle_map.add(&scene.panels, panel)
+	assert(err == mem.Allocator_Error.None)
+
+	if parent_handle != EMPTY_HANDLE {
+		parent := scene_get_panel(scene, parent_handle)
+		assert(parent != nil)
+
+		append(&parent.children_handles, handle)
+	}
+
+	for child in panel_flat.children {
+		panel_unflatten(scene, handle, child, allocator)
+	}
+
+	return handle
 }
 
 // panel_deserialize :: proc(json_string: string, allocator := context.allocator) -> PanelFlat {
@@ -159,6 +214,8 @@ panel_destroy :: proc(scene: ^Scene, panel: ^Panel, allocator: mem.Allocator = c
 		panel_destroy(scene, handle_map.get(scene.panels, child_handle), allocator)
 	}
 
+	spec_destroy(panel.spec)
+	delete(panel.name, allocator)
 	delete(panel.uuid, allocator)
 	builtin.delete(panel.children_handles)
 }

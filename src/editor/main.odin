@@ -76,7 +76,7 @@ main :: proc() {
 
 	scene_handle := ui.add_scene(&ui_instance, screen_rect, "main")
 	scene := ui.get_scene(&ui_instance, scene_handle)
-	ui.scene_add_panel(
+	img_handle := ui.scene_add_panel(
 		scene,
 		scene.root_handle,
 		"img",
@@ -89,8 +89,8 @@ main :: proc() {
 		},
 	)
 
-	s := ui.panel_serialize(scene, scene.root_handle)
-	defer delete(s)
+	flat := ui.panel_flatten(scene, img_handle, context.temp_allocator)
+	_ = ui.panel_unflatten(scene, scene.root_handle, flat)
 
 	render.get_camera_2d(app_instance.renderer, 1).zoom = 1
 

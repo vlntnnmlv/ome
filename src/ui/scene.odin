@@ -63,15 +63,16 @@ scene_add_panel :: proc(
 	rect: core.Rect,
 	spec: Spec,
 	allocator: mem.Allocator = context.allocator,
-) {
+) -> PanelHandle {
 	panel := panel_create(parent_handle, name, rect, spec, allocator)
 	panel_handle, err := handle_map.add(&scene.panels, panel)
 	assert(err == runtime.Allocator_Error.None)
 
-	if parent_handle == EMPTY_HANDLE do return
+	if parent_handle == EMPTY_HANDLE do return EMPTY_HANDLE
 
 	parent := handle_map.get(scene.panels, parent_handle)
 	append(&parent.children_handles, panel_handle)
+	return panel_handle
 }
 
 scene_get_panel :: proc(scene: ^Scene, handle: PanelHandle) -> ^Panel {
