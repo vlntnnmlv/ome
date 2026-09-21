@@ -9,7 +9,7 @@ import "ome:handle_map"
 
 BindTable :: struct {
 	device:    ^MTL.Device,
-	textures:  handle_map.HandleMap(Texture, TextureHandle),
+	textures:  handle_map.Map(Texture, TextureHandle),
 	resources: [dynamic]^MTL.Resource,
 	sampler:   ^MTL.SamplerState,
 	encoder:   ^MTL.ArgumentEncoder,

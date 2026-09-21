@@ -307,6 +307,24 @@ DropFileEvent :: struct {
 	path: string,
 }
 
+is_input_event :: proc(event: Event) -> bool {
+	#partial switch e in event {
+	case KeyEvent, MouseMoveEvent, MouseButtonEvent, MouseWheelEvent:
+		_ = e
+		return true
+	}
+	return false
+}
+
+is_mouse_event :: proc(event: Event) -> bool {
+	#partial switch e in event {
+	case MouseMoveEvent, MouseButtonEvent, MouseWheelEvent:
+		_ = e
+		return true
+	}
+	return false
+}
+
 poll_event :: proc(window: ^Window) -> (Event, bool) {
 	for e: SDL.Event; SDL.PollEvent(&e); {
 		#partial switch e.type {

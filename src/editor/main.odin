@@ -13,6 +13,8 @@ import "ome:platform"
 import "ome:render"
 import "ome:ui"
 
+import lua "vendor:lua/5.4"
+
 track_start :: proc(allocator: mem.Allocator) -> (mem.Allocator, ^mem.Tracking_Allocator) {
 	tracking_allocator: ^mem.Tracking_Allocator = new(mem.Tracking_Allocator)
 	mem.tracking_allocator_init(tracking_allocator, allocator)
@@ -40,6 +42,13 @@ move_camera :: proc(a: ^app.Instance) {
 }
 
 main :: proc() {
+	L := lua.L_newstate()
+	if L == nil {
+		fmt.eprintln("couldn't create lua state")
+	}
+}
+
+main2 :: proc() {
 	// system
 	tracked_allocator, tracking_allocator := track_start(context.allocator)
 	context.allocator = tracked_allocator
@@ -75,8 +84,18 @@ main :: proc() {
 	app.add_event_handler(app_instance, &ui_instance, ui.handle_event)
 
 	scene_handle := ui.add_scene(&ui_instance, screen_rect, "main")
+	hud_handle := ui.add_scene(&ui_instance, core.shrink(screen_rect, {100, 100, 100, 100}), "hud")
+	ui.show_scene(&ui_instance, scene_handle)
+	ui.show_scene(&ui_instance, hud_handle)
+
+	hud := ui.get_scene(&ui_instance, hud_handle)
+	hud.is_modal = true
+	hud.is_following_window = false
+	ui.scene_add_panel(hud, hud.root_handle, "corner", {120, 120, 120, 60}, ui.PanelSpec{})
+
 	scene := ui.get_scene(&ui_instance, scene_handle)
-	img_handle := ui.scene_add_panel(
+	scene.is_following_window = true
+	_ = ui.scene_add_panel(
 		scene,
 		scene.root_handle,
 		"img",
@@ -89,8 +108,15 @@ main :: proc() {
 		},
 	)
 
-	flat := ui.panel_flatten(scene, img_handle, context.temp_allocator)
-	_ = ui.panel_unflatten(scene, scene.root_handle, flat)
+
+	// flat := ui.panel_flatten(scene, img_handle, context.temp_allocator)
+	// copy_handle := ui.panel_unflatten(scene, scene.root_handle, flat)
+	// a := ui.scene_get_panel(scene, img_handle)
+	// b := ui.scene_get_panel(scene, copy_handle)
+	// ensure(a.name == b.name)
+	// ensure(a.uuid == b.uuid)
+	// ensure(a.rect == b.rect)
+	// ensure(len(a.children_handles) == len(b.children_handles))
 
 	render.get_camera_2d(app_instance.renderer, 1).zoom = 1
 
@@ -108,8 +134,6 @@ main :: proc() {
 		},
 	)
 
-	// a.key_callbacks[.D] = proc(a: ^app.App) {move_camera(a, .D)}
-
 	// start the event loop
 	for app.frame(app_instance) {
 		for click in ui.scene_drain_clicks(scene) {
@@ -123,7 +147,7 @@ main :: proc() {
 		render.quad(app_instance.renderer, {400, 400, 30, 30}, core.Color{244, 244, 244, 255})
 		render.set_camera(app_instance.renderer, 0)
 
-		ui.scene_render(app_instance.renderer, scene)
+		ui.render(app_instance.renderer, &ui_instance)
 		render.text(
 			app_instance.renderer,
 			fmt.tprint(app_instance.clock.dt),

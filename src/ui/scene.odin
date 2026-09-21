@@ -11,14 +11,16 @@ import "ome:render"
 SceneHandle :: distinct handle_map.Handle
 
 Scene :: struct {
-	uuid:           string,
-	handle:         SceneHandle,
-	root_handle:    PanelHandle,
-	hovered_handle: PanelHandle,
-	pressed_handle: PanelHandle,
-	clicks:         [dynamic]Click,
-	panels:         handle_map.HandleMap(Panel, PanelHandle),
-	name:           string,
+	uuid:                string,
+	handle:              SceneHandle,
+	root_handle:         PanelHandle,
+	hovered_handle:      PanelHandle,
+	pressed_handle:      PanelHandle,
+	clicks:              [dynamic]Click,
+	panels:              handle_map.Map(Panel, PanelHandle),
+	name:                string,
+	is_modal:            bool,
+	is_following_window: bool,
 }
 
 Click :: struct {
@@ -36,12 +38,14 @@ scene_create :: proc(
 	assert(err == runtime.Allocator_Error.None)
 
 	scene: Scene = {
-		uuid   = core.uuid_create(allocator),
-		panels = panels,
-		clicks = make([dynamic]Click),
+		uuid                = core.uuid_create(allocator),
+		panels              = panels,
+		clicks              = make([dynamic]Click, allocator),
+		is_following_window = true,
 	}
 
 	root_panel := panel_create(EMPTY_HANDLE, "root", rect, PanelSpec{}, allocator)
+	root_panel.ignore_events = true
 
 	root_handle, err_2 := handle_map.add(&scene.panels, root_panel)
 	assert(err_2 == runtime.Allocator_Error.None)
@@ -82,8 +86,10 @@ scene_get_panel :: proc(scene: ^Scene, handle: PanelHandle) -> ^Panel {
 scene_handle_event :: proc(scene: ^Scene, event: platform.Event) -> bool {
 	#partial switch e in event {
 	case platform.ResizeEvent:
-		root := scene_get_panel(scene, scene.root_handle)
-		root.rect = core.Rect{0, 0, f32(e.info.logical_width), f32(e.info.logical_height)}
+		if scene.is_following_window {
+			root := scene_get_panel(scene, scene.root_handle)
+			root.rect = core.Rect{0, 0, f32(e.info.logical_width), f32(e.info.logical_height)}
+		}
 		return false
 	case platform.MouseMoveEvent:
 		hit := panel_hit_test(scene.root_handle, scene, e.position)
@@ -129,6 +135,18 @@ scene_drain_clicks :: proc(scene: ^Scene, allocator := context.temp_allocator) -
 	copy(out, scene.clicks[:])
 	clear(&scene.clicks)
 	return out
+}
+
+scene_clear_input :: proc(scene: ^Scene) {
+	if panel := scene_get_panel(scene, scene.hovered_handle); panel != nil do panel.hovered = false
+	if panel := scene_get_panel(scene, scene.pressed_handle); panel != nil do panel.pressed = false
+	scene.hovered_handle = EMPTY_HANDLE
+	scene.pressed_handle = EMPTY_HANDLE
+}
+
+scene_clear_hover :: proc(scene: ^Scene) {
+	if panel := scene_get_panel(scene, scene.hovered_handle); panel != nil do panel.hovered = false
+	scene.hovered_handle = EMPTY_HANDLE
 }
 
 scene_render :: proc(renderer: ^render.Renderer, scene: ^Scene) {

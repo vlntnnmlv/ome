@@ -9,8 +9,8 @@ import "ome:handle_map"
 
 Instance :: struct {
 	device:        ^gpu.Device,
-	fonts:         handle_map.HandleMap(Font, FontHandle),
-	atlases:       handle_map.HandleMap(Atlas, AtlasHandle),
+	fonts:         handle_map.Map(Font, FontHandle),
+	atlases:       handle_map.Map(Atlas, AtlasHandle),
 	texture_names: map[string]gpu.TextureHandle,
 }
 

@@ -22,6 +22,7 @@ Panel :: struct {
 	name:             string,
 	rect:             core.Rect,
 	spec:             Spec,
+	ignore_events:    bool,
 	hovered:          bool,
 	pressed:          bool,
 }
@@ -165,20 +166,19 @@ panel_hit_test :: proc(handle: PanelHandle, scene: ^Scene, position: [2]f32) -> 
 	}
 
 	panel := handle_map.get(scene.panels, handle)
+	if panel == nil do return EMPTY_HANDLE
 
 	if !core.contains(panel.rect, position) {
 		return EMPTY_HANDLE
 	}
 
-	n := len(panel.children_handles)
-	for i := n - 1; i >= 0; i -= 1 {
-		child_handle := panel.children_handles[i]
+	#reverse for child_handle in panel.children_handles {
 		if hit := panel_hit_test(child_handle, scene, position); hit != EMPTY_HANDLE {
 			return hit
 		}
 	}
 
-	return handle
+	return EMPTY_HANDLE if panel.ignore_events else handle
 }
 
 panel_render :: proc(renderer: ^render.Renderer, scene: ^Scene, handle: PanelHandle) {
@@ -210,11 +210,14 @@ panel_render :: proc(renderer: ^render.Renderer, scene: ^Scene, handle: PanelHan
 }
 
 panel_destroy :: proc(scene: ^Scene, panel: ^Panel, allocator: mem.Allocator = context.allocator) {
-	for child_handle in panel.children_handles {
-		panel_destroy(scene, handle_map.get(scene.panels, child_handle), allocator)
-	}
+	if panel == nil do return
 
-	spec_destroy(panel.spec)
+	for child_handle in panel.children_handles {
+		panel_destroy(scene, scene_get_panel(scene, child_handle), allocator)
+	}
+	handle_map.remove(&scene.panels, panel.handle)
+
+	spec_destroy(panel.spec, allocator)
 	delete(panel.name, allocator)
 	delete(panel.uuid, allocator)
 	builtin.delete(panel.children_handles)

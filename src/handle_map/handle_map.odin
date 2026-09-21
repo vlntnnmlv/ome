@@ -18,7 +18,7 @@ Handle :: struct {
 	gen: u32,
 }
 
-HandleMap :: struct($T: typeid, $HT: typeid) {
+Map :: struct($T: typeid, $HT: typeid) {
 	items:        [dynamic]^T,
 	items_arena:  virtual.Arena,
 	unused_items: [dynamic]u32,
@@ -29,10 +29,10 @@ make :: proc(
 	$HT: typeid,
 	allocator: mem.Allocator = context.allocator,
 ) -> (
-	handle_map: HandleMap(T, HT),
+	handle_map: Map(T, HT),
 	err: runtime.Allocator_Error,
 ) {
-	handle_map = HandleMap(T, HT) {
+	handle_map = Map(T, HT) {
 		items        = builtin.make([dynamic]^T, allocator),
 		unused_items = builtin.make([dynamic]u32, allocator),
 	}
@@ -50,13 +50,7 @@ arena_initialized :: proc(arena: virtual.Arena) -> bool {
 	return arena.curr_block != nil
 }
 
-add :: proc(
-	handle_map: ^HandleMap($T, $HT),
-	value: T,
-) -> (
-	handle: HT,
-	err: runtime.Allocator_Error,
-) {
+add :: proc(handle_map: ^Map($T, $HT), value: T) -> (handle: HT, err: runtime.Allocator_Error) {
 	if !arena_initialized(handle_map.items_arena) {
 		handle_map^ = make(T, HT) or_return
 	}
@@ -88,7 +82,7 @@ add :: proc(
 	return new_item.handle, nil
 }
 
-get :: proc(m: HandleMap($T, $HT), h: HT) -> ^T {
+get :: proc(m: Map($T, $HT), h: HT) -> ^T {
 	if h.idx <= 0 || h.idx >= u32(builtin.len(m.items)) {
 		return nil
 	}
@@ -100,7 +94,7 @@ get :: proc(m: HandleMap($T, $HT), h: HT) -> ^T {
 	return nil
 }
 
-remove :: proc(m: ^HandleMap($T, $HT), h: HT) {
+remove :: proc(m: ^Map($T, $HT), h: HT) {
 	if h.idx <= 0 || h.idx >= u32(builtin.len(m.items)) {
 		return
 	}
@@ -111,24 +105,24 @@ remove :: proc(m: ^HandleMap($T, $HT), h: HT) {
 	}
 }
 
-valid :: proc(m: HandleMap($T, $HT), h: HT) -> bool {
+valid :: proc(m: Map($T, $HT), h: HT) -> bool {
 	return get(m, h) != nil
 }
 
-len :: proc(m: HandleMap($T, $HT)) -> int {
+len :: proc(m: Map($T, $HT)) -> int {
 	return max(builtin.len(m.items), 1) - builtin.len(m.unused_items) - 1
 }
 
-HandleMapIterator :: struct($T: typeid, $HT: typeid) {
-	m:     ^HandleMap(T, HT),
+Iterator :: struct($T: typeid, $HT: typeid) {
+	m:     ^Map(T, HT),
 	index: int,
 }
 
-make_iter :: proc(m: ^HandleMap($T, $HT)) -> HandleMapIterator(T, HT) {
+make_iter :: proc(m: ^Map($T, $HT)) -> Iterator(T, HT) {
 	return {m = m}
 }
 
-iter :: proc(it: ^HandleMapIterator($T, $HT)) -> (val: ^T, h: HT, cond: bool) {
+iter :: proc(it: ^Iterator($T, $HT)) -> (val: ^T, h: HT, cond: bool) {
 	for _ in it.index ..< builtin.len(it.m.items) {
 		item := it.m.items[it.index]
 		it.index += 1
@@ -145,7 +139,7 @@ skip :: proc(e: $T) -> bool {
 	return e.handle.idx == 0
 }
 
-delete :: proc(handle_map: ^HandleMap($T, $HT)) {
+delete :: proc(handle_map: ^Map($T, $HT)) {
 	virtual.arena_destroy(&handle_map.items_arena)
 	builtin.delete(handle_map.items)
 	builtin.delete(handle_map.unused_items)
