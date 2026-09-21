@@ -256,10 +256,22 @@ Key :: enum {
 	AppControlBookmarks  = 286,
 }
 
+MouseButton :: enum u8 {
+	Unknown = 0,
+	Left    = 1,
+	Middle  = 2,
+	Right   = 3,
+	X1      = 4,
+	X2      = 5,
+}
+
 Event :: union {
 	QuitEvent,
 	ResizeEvent,
 	KeyEvent,
+	MouseMoveEvent,
+	MouseButtonEvent,
+	MouseWheelEvent,
 	DropFileEvent,
 }
 
@@ -272,6 +284,23 @@ ResizeEvent :: struct {
 KeyEvent :: struct {
 	key:  Key,
 	down: bool,
+}
+
+MouseMoveEvent :: struct {
+	position: [2]f32,
+	delta:    [2]f32,
+}
+
+MouseButtonEvent :: struct {
+	button:   MouseButton,
+	down:     bool,
+	position: [2]f32,
+	clicks:   u8,
+}
+
+MouseWheelEvent :: struct {
+	position: [2]f32,
+	delta:    [2]f32,
 }
 
 DropFileEvent :: struct {
@@ -292,6 +321,30 @@ poll_event :: proc(window: ^Window) -> (Event, bool) {
 			return KeyEvent{key = Key(e.key.scancode), down = true}, true
 		case .KEY_UP:
 			return KeyEvent{key = Key(e.key.scancode), down = false}, true
+		case .MOUSE_MOTION:
+			return MouseMoveEvent {
+					position = {e.motion.x, e.motion.y},
+					delta = {e.motion.xrel, e.motion.yrel},
+				},
+				true
+		case .MOUSE_BUTTON_DOWN, .MOUSE_BUTTON_UP:
+			button := MouseButton.Unknown
+			if e.button.button >= 1 && e.button.button <= 5 {
+				button = MouseButton(e.button.button)
+			}
+			return MouseButtonEvent {
+					button = button,
+					down = e.button.down,
+					position = {e.button.x, e.button.y},
+					clicks = e.button.clicks,
+				},
+				true
+		case .MOUSE_WHEEL:
+			return MouseWheelEvent {
+					delta = {e.wheel.x, e.wheel.y},
+					position = {e.wheel.mouse_x, e.wheel.mouse_y},
+				},
+				true
 		}
 	}
 
@@ -304,4 +357,28 @@ key_down :: proc(key: Key) -> bool {
 	if state == nil do return false
 	if int(key) < 0 || int(key) >= int(numkeys) do return false
 	return state[int(key)]
+}
+
+mouse_position :: proc() -> [2]f32 {
+	x, y: f32
+	flags := SDL.GetMouseState(&x, &y)
+	_ = flags
+	return {x, y}
+}
+
+mouse_button_down :: proc(button: MouseButton) -> bool {
+	flags := SDL.GetMouseState(nil, nil)
+	#partial switch button {
+	case .Left:
+		return .LEFT in flags
+	case .Middle:
+		return .MIDDLE in flags
+	case .Right:
+		return .RIGHT in flags
+	case .X1:
+		return .X1 in flags
+	case .X2:
+		return .X2 in flags
+	}
+	return false
 }

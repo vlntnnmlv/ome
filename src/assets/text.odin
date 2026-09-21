@@ -1,4 +1,4 @@
-package omeresources
+package omeassets
 
 import "core:math"
 import "core:unicode/utf8"

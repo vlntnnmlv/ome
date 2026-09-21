@@ -66,7 +66,7 @@ buffer_submit :: proc(buffer: ^Buffer($T), slot: int) {
 	mem.copy(raw_data(contents), raw_data(buffer.cpu), len(buffer.cpu) * size_of(T))
 }
 
-buffer_delete :: proc(buffer: ^Buffer($T)) {
+buffer_destroy :: proc(buffer: ^Buffer($T)) {
 	delete(buffer.cpu)
 
 	for gpu in buffer.gpu_ring {

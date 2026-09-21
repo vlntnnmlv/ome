@@ -4,11 +4,11 @@ import "core:log"
 
 import STBTT "vendor:stb/truetype"
 
+import "ome:assets"
 import "ome:core"
-import "ome:core/gpu"
-import "ome:core/handle_map"
-import "ome:core/platform"
-import "ome:core/resources"
+import "ome:gpu"
+import "ome:handle_map"
+import "ome:platform"
 
 @(private = "file")
 CUBE_FACES := [6][4]int {
@@ -23,12 +23,12 @@ CUBE_FACES := [6][4]int {
 Renderer :: struct {
 	device: ^gpu.Device,
 	batch:  gpu.Batch,
-	assets: ^resources.Assets,
+	assets: ^assets.Instance,
 }
 
 create :: proc(
 	device: ^gpu.Device,
-	assets: ^resources.Assets,
+	assets: ^assets.Instance,
 	window_info: platform.WindowInfo,
 ) -> ^Renderer {
 	renderer := new(Renderer)
@@ -39,7 +39,7 @@ create :: proc(
 }
 
 begin :: proc(renderer: ^Renderer) {
-	resources.flush(renderer.assets)
+	assets.flush(renderer.assets)
 	gpu.device_begin(renderer.device)
 	gpu.batch_clear(&renderer.batch)
 }
@@ -79,15 +79,15 @@ set_camera_3d :: proc(renderer: ^Renderer, index: u32, camera: core.Camera3D) {
 	renderer.batch.cameras[index] = camera
 }
 
-delete :: proc(renderer: ^Renderer) {
+destroy :: proc(renderer: ^Renderer) {
 	gpu.device_wait_idle(renderer.device)
 
-	resources.delete(renderer.assets)
+	assets.destroy(renderer.assets)
 	free(renderer.assets)
 
-	gpu.batch_delete(&renderer.batch)
+	gpu.batch_destroy(&renderer.batch)
 
-	gpu.device_delete(renderer.device)
+	gpu.device_destroy(renderer.device)
 	free(renderer.device)
 
 	free(renderer)
@@ -162,16 +162,16 @@ rect :: proc(renderer: ^Renderer, rect: core.Rect, color: core.Color = core.BLAC
 text :: proc(
 	renderer: ^Renderer,
 	text: string,
-	font_handle: resources.FontHandle,
+	font_handle: assets.FontHandle,
 	font_size: u32,
 	rect: core.Rect,
 	color: core.Color = core.BLACK,
 ) {
-	font := resources.get_font(renderer.assets, font_handle)
+	font := assets.get_font(renderer.assets, font_handle)
 
-	wanted_font_size := resources.text_fit(font, text, font_size, rect)
-	resources.font_ensure_size(font, wanted_font_size)
-	real_font_size := resources.font_nearest_size(font, wanted_font_size)
+	wanted_font_size := assets.text_fit(font, text, font_size, rect)
+	assets.font_ensure_size(font, wanted_font_size)
+	real_font_size := assets.font_nearest_size(font, wanted_font_size)
 
 	x := rect.x
 	y := rect.y
@@ -181,8 +181,8 @@ text :: proc(
 	total_uvs := make([dynamic]gpu.Uv, 0, cap, context.temp_allocator)
 
 	start := len(renderer.batch.vertices.cpu)
-	it := resources.StringPrintableIterator{text, 0}
-	for char in resources.iterate_printable(&it) {
+	it := assets.StringPrintableIterator{text, 0}
+	for char in assets.iterate_printable(&it) {
 		quad: STBTT.aligned_quad
 		STBTT.GetPackedQuad(
 			&font.char_data[real_font_size][0],
@@ -284,14 +284,14 @@ texture_by_name :: proc(
 
 texture_by_atlas_name :: proc(
 	renderer: ^Renderer,
-	atlas_handle: resources.AtlasHandle,
+	atlas_handle: assets.AtlasHandle,
 	sprite_name: string,
 	rect: core.Rect,
 	color: core.Color = core.BLACK,
 	slice_offset: core.RectOffset = core.ZERO_RECT_OFFSET,
 ) {
 
-	atlas := resources.get_atlas(renderer.assets, atlas_handle)
+	atlas := assets.get_atlas(renderer.assets, atlas_handle)
 
 	positions: [dynamic]gpu.Position
 	uvs: []gpu.Uv

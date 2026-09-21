@@ -1,4 +1,4 @@
-package omeresources
+package omeassets
 
 import "base:builtin"
 import "core:os"
@@ -8,8 +8,8 @@ import STBRP "vendor:stb/rect_pack"
 import STBTT "vendor:stb/truetype"
 
 import "ome:core"
-import "ome:core/gpu"
-import "ome:core/handle_map"
+import "ome:gpu"
+import "ome:handle_map"
 
 INITIAL_BITMAP_SIZE :: 1024
 REFERENCE_FONT_SIZE :: 32
@@ -41,6 +41,21 @@ Font :: struct {
 	dirty:        bool,
 }
 
+font_ensure_size :: proc(font: ^Font, size: u32) {
+	if slice.contains(font.sizes[:], size) do return
+	if slice.contains(font.pending[:], size) do return
+	append(&font.pending, size)
+}
+
+font_nearest_size :: proc(font: ^Font, size: u32) -> u32 {
+	best_fit := font.sizes[0]
+	for s in font.sizes {
+		if abs(int(s) - int(size)) < abs(int(best_fit) - int(size)) do best_fit = s
+	}
+	return best_fit
+}
+
+@(private)
 font_load :: proc(font: ^Font, path: string, sizes: []u32 = {}) -> FontError {
 	font.path = path
 	font.bitmap_size = INITIAL_BITMAP_SIZE
@@ -81,20 +96,7 @@ font_load :: proc(font: ^Font, path: string, sizes: []u32 = {}) -> FontError {
 	return .None
 }
 
-font_ensure_size :: proc(font: ^Font, size: u32) {
-	if slice.contains(font.sizes[:], size) do return
-	if slice.contains(font.pending[:], size) do return
-	append(&font.pending, size)
-}
-
-font_nearest_size :: proc(font: ^Font, size: u32) -> u32 {
-	best_fit := font.sizes[0]
-	for s in font.sizes {
-		if abs(int(s) - int(size)) < abs(int(best_fit) - int(size)) do best_fit = s
-	}
-	return best_fit
-}
-
+@(private)
 font_pack_size :: proc(font: ^Font, size: u32) -> FontError {
 	chars := make([]STBTT.packedchar, CharAmount)
 
@@ -133,6 +135,7 @@ font_pack_size :: proc(font: ^Font, size: u32) -> FontError {
 	return .None
 }
 
+@(private)
 font_flush :: proc(font: ^Font, bind_table: ^gpu.BindTable) {
 	for size in font.pending do font_pack_size(font, size)
 	clear(&font.pending)
@@ -160,7 +163,8 @@ font_flush :: proc(font: ^Font, bind_table: ^gpu.BindTable) {
 	font.dirty = false
 }
 
-font_delete :: proc(font: ^Font) {
+@(private)
+font_destroy :: proc(font: ^Font) {
 	for _, &value in font.char_data {
 		builtin.delete(value)
 	}

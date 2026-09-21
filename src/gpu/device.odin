@@ -7,7 +7,7 @@ import NS "core:sys/darwin/Foundation"
 import MTL "vendor:darwin/Metal"
 import CA "vendor:darwin/QuartzCore"
 
-import "ome:core/platform"
+import "ome:platform"
 
 FrameContext :: struct {
 	pool:           ^NS.AutoreleasePool,
@@ -185,8 +185,8 @@ device_resize :: proc(device: ^Device, window_info: platform.WindowInfo) {
 	)
 }
 
-device_delete :: proc(device: ^Device) {
-	bind_table_delete(device.bind_table)
+device_destroy :: proc(device: ^Device) {
+	bind_table_destroy(device.bind_table)
 
 	free(device.bind_table)
 	free(device.frame_complete_block)

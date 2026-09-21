@@ -1,4 +1,4 @@
-package omeresources
+package omeassets
 
 import "base:builtin"
 import "core:log"
@@ -10,8 +10,8 @@ import STBI "vendor:stb/image"
 import STBR "vendor:stb/rect_pack"
 
 import "ome:core"
-import "ome:core/gpu"
-import "ome:core/handle_map"
+import "ome:gpu"
+import "ome:handle_map"
 
 AtlasError :: enum {
 	None = 0,
@@ -33,11 +33,13 @@ SpriteData :: struct {
 	atlas_rect: core.Rect,
 }
 
+@(private)
 atlas_load :: proc {
 	atlas_load_from_directory,
 	atlas_load_from_files,
 }
 
+@(private)
 atlas_load_from_directory :: proc(
 	atlas: ^Atlas,
 	bind_table: ^gpu.BindTable,
@@ -54,6 +56,7 @@ atlas_load_from_directory :: proc(
 	return atlas_load_from_files(atlas, bind_table, names[:], atlas_name)
 }
 
+@(private)
 atlas_load_from_files :: proc(
 	atlas: ^Atlas,
 	bind_table: ^gpu.BindTable,
@@ -149,6 +152,7 @@ atlas_load_from_files :: proc(
 	return .None
 }
 
+@(private)
 atlas_build_texture :: proc(
 	bind_table: ^gpu.BindTable,
 	textures_data: []gpu.TextureData,
@@ -175,6 +179,7 @@ atlas_build_texture :: proc(
 	return handle
 }
 
+@(private)
 atlas_destroy :: proc(atlas: ^Atlas) {
 	for name, sprite in atlas.sprites {
 		builtin.delete(name)

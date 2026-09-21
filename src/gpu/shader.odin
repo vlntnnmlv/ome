@@ -2,6 +2,7 @@ package omegpu
 
 import "core:log"
 import "core:os"
+
 @(private)
 shader_compile_slang :: proc(
 	path: string,

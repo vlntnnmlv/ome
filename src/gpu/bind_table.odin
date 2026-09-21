@@ -5,7 +5,7 @@ import "base:runtime"
 import NS "core:sys/darwin/Foundation"
 import MTL "vendor:darwin/Metal"
 
-import "ome:core/handle_map"
+import "ome:handle_map"
 
 BindTable :: struct {
 	device:    ^MTL.Device,
@@ -63,7 +63,7 @@ bind_table_rebuild :: proc(bind_table: ^BindTable) {
 	bind_table.encoder->setSamplerState(bind_table.sampler, MAX_TEXTURES)
 }
 
-bind_table_delete :: proc(bind_table: ^BindTable) {
+bind_table_destroy :: proc(bind_table: ^BindTable) {
 	it := handle_map.make_iter(&bind_table.textures)
 	for texture in handle_map.iter(&it) {
 		texture.data->release()

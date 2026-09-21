@@ -8,7 +8,7 @@ import MTL "vendor:darwin/Metal"
 import STBI "vendor:stb/image"
 
 import "ome:core"
-import "ome:core/handle_map"
+import "ome:handle_map"
 
 MAX_TEXTURES :: 256
 

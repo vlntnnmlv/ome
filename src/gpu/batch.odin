@@ -6,7 +6,7 @@ import NS "core:sys/darwin/Foundation"
 import MTL "vendor:darwin/Metal"
 
 import "ome:core"
-import "ome:core/platform"
+import "ome:platform"
 
 MAX_CAMERAS: u32 : 4
 
@@ -121,9 +121,9 @@ batch_resize :: proc(batch: ^Batch, window_info: platform.WindowInfo) {
 
 }
 
-batch_delete :: proc(batch: ^Batch) {
+batch_destroy :: proc(batch: ^Batch) {
 	delete(batch.render_calls)
-	buffer_delete(&batch.vertices)
+	buffer_destroy(&batch.vertices)
 }
 
 batch_set_camera :: proc(batch: ^Batch, index: u32) {

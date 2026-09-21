@@ -1,7 +1,7 @@
 package omeui
 
+import "ome:assets"
 import "ome:core"
-import "ome:core/resources"
 
 Spec :: union {
 	PanelSpec,
@@ -20,7 +20,7 @@ ButtonSpec :: struct {
 
 ImageSpec :: struct {
 	using panel:  PanelSpec,
-	atlas_handle: resources.AtlasHandle,
+	atlas_handle: assets.AtlasHandle,
 	sprite_name:  string,
 	slice_offset: core.RectOffset,
 }
@@ -28,6 +28,6 @@ ImageSpec :: struct {
 TextSpec :: struct {
 	using panel: PanelSpec,
 	text:        string,
-	font_handle: resources.FontHandle,
+	font_handle: assets.FontHandle,
 	font_size:   u32,
 }
