@@ -8,3 +8,5 @@ debug_build
 debug_build.dSYM
 
 build
+
+vendor

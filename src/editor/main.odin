@@ -46,6 +46,16 @@ main :: proc() {
 	if L == nil {
 		fmt.eprintln("couldn't create lua state")
 	}
+	defer lua.close(L)
+
+	lua.L_openlibs(L)
+
+	if lua.L_dostring(L, "return 2+3+8") != 0 {
+		fmt.eprintln("lua error:", lua.tostring(L, -1))
+		return
+	}
+
+	fmt.println("lua says:", lua.tostring(L, -1))
 }
 
 main2 :: proc() {
@@ -70,7 +80,12 @@ main2 :: proc() {
 	// resources
 	assets_instance := app_instance.renderer.assets
 
-	font_handle, ferr := assets.load_font(assets_instance, "assets/fonts/Iosevka.ttf", {32, 64})
+	font_handle, ferr := assets.load_font(
+		assets_instance,
+		"assets/fonts/Iosevka.ttf",
+		"iosevka",
+		{32, 64},
+	)
 	assert(ferr == assets.FontError.None)
 
 	atlas_handle, aerr := assets.load_atlas(assets_instance, "assets/textures/ui", "ui_atlas")
