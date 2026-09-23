@@ -1,0 +1,52 @@
+{
+	"name": "root",
+	"rect": [0, 0, 1080, 720],
+	"children": [
+		{
+			"name": "play",
+			"kind": "button",
+			"rect": [100, 300, 200, 60],
+			"color": [60, 60, 60, 255],
+			"on_click": "play",
+			"children": [
+				{
+					"name": "play_label",
+					"kind": "text",
+					"rect": [110, 310, 180, 40],
+					"text": "Play",
+					"bind": { "text": "title", "color": "tint" },
+					"font": "iosevka",
+					"size": 64,
+					"color": [255, 255, 255, 255]
+				}
+			]
+		},
+		{
+			"name": "img",
+			"kind": "image",
+			"rect": [490, 310, 100, 100],
+			"atlas": "ui_atlas",
+			"sprite": "panel",
+			"slice": [8, 8, 8, 8],
+			"color": [255, 255, 255, 255]
+		},
+		{
+			"name": "img",
+			"kind": "image",
+			"rect": [590, 310, 100, 100],
+			"atlas": "ui_atlas",
+			"sprite": "panel",
+			"slice": [8, 8, 8, 8],
+			"color": [255, 255, 255, 255]
+		},
+		{
+			"name": "label",
+			"kind": "text",
+			"rect": [100, 100, 500, 100],
+			"text": "hello world!",
+			"font": "iosevka",
+			"size": 64,
+			"color": [0, 0, 255, 255]
+		}
+	]
+}

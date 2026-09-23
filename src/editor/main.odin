@@ -94,13 +94,21 @@ main :: proc() {
 	defer script.destroy(script_instance)
 
 	scene := ui.get_scene(&ui_instance, scene_handle)
+	scene.is_debug = true
+
 	// ---------
 
 	// --- BIND ---
 	bind_instance := bind.instance(&ui_instance, script_instance, assets_instance)
 	defer bind.destroy(bind_instance)
 
-	bind.add_view(bind_instance, scene_handle, scene.root_handle, "assets/ui/main.lua")
+	bind.add_view(
+		bind_instance,
+		scene_handle,
+		scene.root_handle,
+		"assets/ui/main.json",
+		"assets/ui/main.lua",
+	)
 
 	// --- CAMERAS ---
 	render.get_camera_2d(app_instance.renderer, 1).zoom = 1
@@ -124,9 +132,6 @@ main :: proc() {
 	// --- LOOP ---
 	for app.frame(app_instance) {
 		bind.update(bind_instance, app_instance.clock.dt)
-		for click in ui.scene_drain_clicks(scene) {
-			log.infof("clicked %v with %v (x%v)", click.panel_handle, click.button, click.count)
-		}
 
 		render.set_camera(app_instance.renderer, 2)
 		move_camera(app_instance)
@@ -138,7 +143,7 @@ main :: proc() {
 		ui.render(app_instance.renderer, &ui_instance)
 		render.text(
 			app_instance.renderer,
-			fmt.tprint(app_instance.clock.dt),
+			fmt.tprint(app_instance.clock.fps),
 			font_handle,
 			77,
 			{0, screen_rect.h, 500, 500},

@@ -2,6 +2,7 @@ package omescript
 
 import "base:runtime"
 import "core:c"
+import "core:fmt"
 import "core:log"
 import "core:mem"
 import "core:strings"
@@ -14,6 +15,57 @@ Error :: enum {
 	Syntax,
 	Runtime,
 	Memory,
+}
+
+Ref :: distinct i32
+NO_REF :: Ref(lua.NOREF)
+
+@(private)
+ref_top :: proc(instance: ^Instance) -> Ref {
+	return Ref(lua.L_ref(instance.state, lua.REGISTRYINDEX))
+}
+
+unref :: proc(instance: ^Instance, ref: Ref) {
+	if ref == NO_REF do return
+	lua.L_unref(instance.state, lua.REGISTRYINDEX, c.int(ref))
+}
+
+load_module :: proc(instance: ^Instance, path: string) -> (Ref, bool) {
+	if err, msg := run_file(instance, path); err != .None {
+		log.errorf("script: %s: %v: %s", path, err, msg)
+		return NO_REF, false
+	}
+	if !lua.istable(instance.state, -1) {
+		log.errorf("script: %s must return a table", path)
+		clear_stack(instance)
+		return NO_REF, false
+	}
+	return ref_top(instance), true
+}
+
+@(private)
+push_module_table :: proc(instance: ^Instance, module: Ref, table_key: cstring) -> bool {
+	lua.rawgeti(instance.state, lua.REGISTRYINDEX, lua.Integer(module))
+	lua.getfield(instance.state, -1, table_key)
+	return lua.istable(instance.state, -1)
+}
+
+call_action :: proc(instance: ^Instance, module: Ref, name: string) -> (Error, string) {
+	L := instance.state
+	top := lua.gettop(L)
+	defer lua.settop(L, top)
+
+	push_module_table(instance, module, "actions")
+
+	cname := strings.clone_to_cstring(name, context.temp_allocator)
+	lua.getfield(L, -1, cname)
+	if !lua.isfunction(L, -1) do return .Runtime, fmt.tprintf("no action '%s'", name)
+
+	lua.getfield(L, -3, "model")
+	if rc := lua.pcall(L, 1, 0, 0); rc != 0 {
+		return status_to_error(lua.Status(rc)), pop_message(instance, context.temp_allocator)
+	}
+	return .None, ""
 }
 
 Instance :: struct {
@@ -55,23 +107,17 @@ lua_alloc :: proc "c" (ud: rawptr, ptr: rawptr, osize, nsize: c.size_t) -> rawpt
 	return raw_data(data) if err == .None else nil
 }
 
-abs_index :: proc(instance: ^Instance, index: i32) -> i32 {
-	if index > 0 do return index
-	return i32(lua.gettop(instance.state)) + index + 1
-}
-
-is_table :: proc(instance: ^Instance, index: i32) -> bool {
-	return lua.istable(instance.state, c.int(index))
-}
-
+@(private)
 array_len :: proc(instance: ^Instance, index: i32) -> int {
 	return int(lua.rawlen(instance.state, c.int(index)))
 }
 
+@(private)
 pop :: proc(instance: ^Instance, n: int = 1) {
 	lua.pop(instance.state, c.int(n))
 }
 
+@(private)
 push_field :: proc(instance: ^Instance, index: i32, key: string) -> bool {
 	ckey := strings.clone_to_cstring(key, context.temp_allocator)
 	lua.getfield(instance.state, c.int(index), ckey)
@@ -82,69 +128,47 @@ push_field :: proc(instance: ^Instance, index: i32, key: string) -> bool {
 	return true
 }
 
-push_index :: proc(instance: ^Instance, index: i32, i: int) -> bool {
-	lua.rawgeti(instance.state, c.int(index), lua.Integer(i))
-	if !lua.istable(instance.state, -1) {
-		lua.pop(instance.state, 1)
-		return false
-	}
-	return true
-}
-
-field_number :: proc(
+get_string :: proc(
 	instance: ^Instance,
-	index: i32,
+	module: Ref,
+	table_key: cstring,
 	key: string,
-	fallback: f32 = 0,
-) -> (
-	f32,
-	bool,
-) {
-	ckey := strings.clone_to_cstring(key, context.temp_allocator)
-	lua.getfield(instance.state, c.int(index), ckey)
-	defer lua.pop(instance.state, 1)
-
-	is_number: b32
-	n := lua.tonumber(instance.state, -1, &is_number)
-	if !is_number do return fallback, false
-	return f32(n), true
-}
-
-field_string :: proc(
-	instance: ^Instance,
-	index: i32,
-	key: string,
-	fallback: string = "",
-	allocator: mem.Allocator = context.allocator,
+	allocator := context.temp_allocator,
 ) -> (
 	string,
 	bool,
 ) {
-	ckey := strings.clone_to_cstring(key, context.temp_allocator)
-	lua.getfield(instance.state, c.int(index), ckey)
-	defer lua.pop(instance.state, 1)
+	L := instance.state
+	top := lua.gettop(L)
+	defer lua.settop(L, top)
 
-	if lua.type(instance.state, -1) != .STRING do return fallback, false
-	return strings.clone(string(lua.tostring(instance.state, -1)), allocator), true
+	push_module_table(instance, module, table_key)
+
+	ckey := strings.clone_to_cstring(key, context.temp_allocator)
+	lua.getfield(L, -1, ckey) // module, tbl, value
+	if lua.isnil(L, -1) do return "", false
+
+	s := lua.L_tostring(L, -1) // module, tbl, value, str
+	return strings.clone(string(s), allocator), true
 }
 
-field_bool :: proc(
+get_numbers :: proc(
 	instance: ^Instance,
-	index: i32,
+	module: Ref,
+	table_key: cstring,
 	key: string,
-	fallback: bool = false,
-) -> (
-	bool,
-	bool,
-) {
-	ckey := strings.clone_to_cstring(key, context.temp_allocator)
-	lua.getfield(instance.state, c.int(index), ckey)
-	defer lua.pop(instance.state, 1)
+	out: []f32,
+) -> bool {
+	L := instance.state
+	top := lua.gettop(L)
+	defer lua.settop(L, top)
 
-	if lua.type(instance.state, -1) != .BOOLEAN do return fallback, false
-	return bool(lua.toboolean(instance.state, -1)), true
+	push_module_table(instance, module, table_key)
+
+	return field_numbers(instance, -1, key, out)
 }
 
+@(private)
 field_numbers :: proc(instance: ^Instance, index: i32, key: string, out: []f32) -> bool {
 	if !push_field(instance, index, key) do return false
 	defer lua.pop(instance.state, 1)
@@ -162,6 +186,7 @@ field_numbers :: proc(instance: ^Instance, index: i32, key: string, out: []f32) 
 	return true
 }
 
+@(private)
 run_file :: proc(
 	instance: ^Instance,
 	path: string,
@@ -183,27 +208,7 @@ run_file :: proc(
 	return .None, ""
 }
 
-run_string :: proc(
-	instance: ^Instance,
-	source: string,
-	allocator: mem.Allocator = context.temp_allocator,
-) -> (
-	err: Error,
-	message: string,
-) {
-	csource := strings.clone_to_cstring(source, context.temp_allocator)
-
-	if status := lua.L_loadstring(instance.state, csource); status != .OK {
-		return status_to_error(status), pop_message(instance, allocator)
-	}
-
-	if rc := lua.pcall(instance.state, 0, 1, 0); rc != 0 {
-		return status_to_error(lua.Status(rc)), pop_message(instance, allocator)
-	}
-
-	return .None, ""
-}
-
+@(private)
 clear_stack :: proc(instance: ^Instance) {
 	lua.settop(instance.state, 0)
 }

@@ -2,6 +2,7 @@ package omeui
 
 import "base:runtime"
 import "core:mem"
+import "core:strings"
 import "ome:platform"
 
 import "ome:core"
@@ -11,6 +12,7 @@ import "ome:render"
 SceneHandle :: distinct handle_map.Handle
 
 Scene :: struct {
+	allocator:           mem.Allocator,
 	uuid:                string,
 	handle:              SceneHandle,
 	root_handle:         PanelHandle,
@@ -21,10 +23,12 @@ Scene :: struct {
 	name:                string,
 	is_modal:            bool,
 	is_following_window: bool,
+	is_debug:            bool,
 }
 
 Click :: struct {
 	panel_handle: PanelHandle,
+	panel_name:   string,
 	button:       platform.MouseButton,
 	count:        u8,
 	action:       string,
@@ -39,6 +43,7 @@ scene_create :: proc(
 	assert(err == runtime.Allocator_Error.None)
 
 	scene: Scene = {
+		allocator           = allocator,
 		uuid                = core.uuid_create(allocator),
 		panels              = panels,
 		clicks              = make([dynamic]Click, allocator),
@@ -57,23 +62,19 @@ scene_create :: proc(
 	return scene
 }
 
-scene_serialize :: proc(scene: ^Scene) {
-
-}
-
 scene_add_panel :: proc(
 	scene: ^Scene,
 	parent_handle: PanelHandle,
 	name: string,
 	rect: core.Rect,
 	spec: Spec,
-	allocator: mem.Allocator = context.allocator,
 ) -> PanelHandle {
-	panel := panel_create(parent_handle, name, rect, spec, allocator)
+	if parent_handle == EMPTY_HANDLE do return EMPTY_HANDLE
+
+	panel := panel_create(parent_handle, name, rect, spec, scene.allocator)
 	panel_handle, err := handle_map.add(&scene.panels, panel)
 	assert(err == runtime.Allocator_Error.None)
 
-	if parent_handle == EMPTY_HANDLE do return EMPTY_HANDLE
 
 	parent := handle_map.get(scene.panels, parent_handle)
 	append(&parent.children_handles, panel_handle)
@@ -84,11 +85,19 @@ scene_get_panel :: proc(scene: ^Scene, handle: PanelHandle) -> ^Panel {
 	return handle_map.get(scene.panels, handle)
 }
 
-scene_remove_panel :: proc(
-	scene: ^Scene,
-	handle: PanelHandle,
-	allocator: mem.Allocator = context.allocator,
-) {
+scene_find_panel :: proc(scene: ^Scene, root: PanelHandle, name: string) -> PanelHandle {
+	panel := scene_get_panel(scene, root)
+	if panel == nil do return EMPTY_HANDLE
+	if panel.name == name do return root
+
+	for child_handle in panel.children_handles {
+		if found := scene_find_panel(scene, child_handle, name); found != EMPTY_HANDLE do return found
+	}
+
+	return EMPTY_HANDLE
+}
+
+scene_remove_panel :: proc(scene: ^Scene, handle: PanelHandle) {
 	panel := scene_get_panel(scene, handle)
 	if panel == nil do return
 
@@ -101,7 +110,7 @@ scene_remove_panel :: proc(
 		}
 	}
 
-	panel_destroy(scene, panel, allocator)
+	panel_destroy(scene, panel)
 
 	scene_clear_input(scene)
 	clear(&scene.clicks)
@@ -116,7 +125,10 @@ scene_handle_event :: proc(scene: ^Scene, event: platform.Event) -> bool {
 		}
 		return false
 	case platform.MouseMoveEvent:
-		hit := panel_hit_test(scene.root_handle, scene, e.position)
+		hit := scene_interaction_target(
+			scene,
+			panel_hit_test(scene.root_handle, scene, e.position),
+		)
 		if hit != scene.hovered_handle {
 			if scene.hovered_handle != EMPTY_HANDLE {
 				scene_get_panel(scene, scene.hovered_handle).hovered = false
@@ -129,7 +141,10 @@ scene_handle_event :: proc(scene: ^Scene, event: platform.Event) -> bool {
 		}
 		return hit != EMPTY_HANDLE
 	case platform.MouseButtonEvent:
-		hit := panel_hit_test(scene.root_handle, scene, e.position)
+		hit := scene_interaction_target(
+			scene,
+			panel_hit_test(scene.root_handle, scene, e.position),
+		)
 		if e.down {
 			if hit != EMPTY_HANDLE {
 				scene_get_panel(scene, hit).pressed = true
@@ -145,7 +160,23 @@ scene_handle_event :: proc(scene: ^Scene, event: platform.Event) -> bool {
 		}
 
 		if hit != EMPTY_HANDLE && hit == was {
-			append(&scene.clicks, Click{panel_handle = hit, button = e.button, count = e.clicks})
+			panel := scene_get_panel(scene, hit)
+			action := ""
+
+			if button, is_button := panel.spec.(ButtonSpec); is_button {
+				action = button.action
+			}
+
+			append(
+				&scene.clicks,
+				Click {
+					panel_handle = hit,
+					panel_name = panel.name,
+					button = e.button,
+					count = e.clicks,
+					action = action,
+				},
+			)
 		}
 		return was != EMPTY_HANDLE
 	}
@@ -153,10 +184,28 @@ scene_handle_event :: proc(scene: ^Scene, event: platform.Event) -> bool {
 	return false
 }
 
+@(private)
+scene_interaction_target :: proc(scene: ^Scene, hit: PanelHandle) -> PanelHandle {
+	current := hit
+	for current != EMPTY_HANDLE {
+		panel := scene_get_panel(scene, current)
+		if panel == nil do break
+		if _, is_button := panel.spec.(ButtonSpec); is_button do return current
+		current = panel.parent_handle
+	}
+
+	return hit
+}
+
 scene_drain_clicks :: proc(scene: ^Scene, allocator := context.temp_allocator) -> []Click {
 	out := make([]Click, len(scene.clicks), allocator)
 
 	copy(out, scene.clicks[:])
+	for &click in out {
+		click.panel_name = strings.clone(click.panel_name, allocator)
+		click.action = strings.clone(click.action, allocator)
+	}
+
 	clear(&scene.clicks)
 	return out
 }
@@ -177,10 +226,10 @@ scene_render :: proc(renderer: ^render.Renderer, scene: ^Scene) {
 	panel_render(renderer, scene, scene.root_handle)
 }
 
-scene_destroy :: proc(scene: ^Scene, allocator: mem.Allocator = context.allocator) {
-	panel_destroy(scene, handle_map.get(scene.panels, scene.root_handle), allocator)
+scene_destroy :: proc(scene: ^Scene) {
+	panel_destroy(scene, handle_map.get(scene.panels, scene.root_handle))
 
 	delete(scene.clicks)
 	handle_map.delete(&scene.panels)
-	delete(scene.uuid, allocator)
+	delete(scene.uuid, scene.allocator)
 }
