@@ -5,7 +5,7 @@ return {
 		{
 			name = "img",
 			kind = "image",
-			rect = { 490, 310, 200, 200 },
+			rect = { 490, 310, 100, 100 },
 			atlas = "ui_atlas",
 			sprite = "panel",
 			slice = { 8, 8, 8, 8 },

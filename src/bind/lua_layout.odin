@@ -1,20 +1,12 @@
-package omeui
+package omebind
 
 import "core:log"
 import "core:mem"
-import "core:time"
+import "ome:core"
 
 import "ome:assets"
-import "ome:core"
 import "ome:script"
-
-LuaView :: struct {
-	path:          string,
-	scene_handle:  SceneHandle,
-	parent_handle: PanelHandle,
-	root_handle:   PanelHandle,
-	mtime:         time.Time,
-}
+import "ome:ui"
 
 @(private)
 panel_flat_from_lua_file :: proc(
@@ -23,7 +15,7 @@ panel_flat_from_lua_file :: proc(
 	path: string,
 	allocator: mem.Allocator,
 ) -> (
-	PanelFlat,
+	ui.PanelFlat,
 	bool,
 ) {
 	if err, msg := script.run_file(script_instance, path); err != .None {
@@ -41,28 +33,6 @@ panel_flat_from_lua_file :: proc(
 	return panel_flat_from_lua(script_instance, assets_instanse, top, allocator)
 }
 
-scene_load_lua :: proc(
-	scene: ^Scene,
-	parent_handle: PanelHandle,
-	script_instance: ^script.Instance,
-	assets_instance: ^assets.Instance,
-	path: string,
-	allocator: mem.Allocator = context.allocator,
-) -> (
-	PanelHandle,
-	bool,
-) {
-	flat, ok := panel_flat_from_lua_file(
-		script_instance,
-		assets_instance,
-		path,
-		context.temp_allocator,
-	)
-	if !ok do return EMPTY_HANDLE, false
-
-	return panel_unflatten(scene, parent_handle, flat, allocator), true
-}
-
 @(private)
 panel_flat_from_lua :: proc(
 	s: ^script.Instance,
@@ -70,7 +40,7 @@ panel_flat_from_lua :: proc(
 	index: i32,
 	allocator: mem.Allocator,
 ) -> (
-	flat: PanelFlat,
+	flat: ui.PanelFlat,
 	ok: bool,
 ) {
 	idx := script.abs_index(s, index)
@@ -86,11 +56,11 @@ panel_flat_from_lua :: proc(
 	spec, spec_ok := spec_from_lua(s, a, idx, allocator)
 	if !spec_ok do return {}, false
 
-	flat = PanelFlat {
+	flat = ui.PanelFlat {
 		name     = name,
 		rect     = core.Rect{r[0], r[1], r[2], r[3]},
 		spec     = spec,
-		children = make([dynamic]PanelFlat, allocator),
+		children = make([dynamic]ui.PanelFlat, allocator),
 	}
 
 	if script.push_field(s, idx, "children") {
@@ -115,7 +85,7 @@ spec_from_lua :: proc(
 	index: i32,
 	allocator: mem.Allocator,
 ) -> (
-	Spec,
+	ui.Spec,
 	bool,
 ) {
 	kind, _ := script.field_string(s, index, "kind", "panel", allocator)
@@ -128,7 +98,7 @@ spec_from_lua :: proc(
 
 	switch kind {
 	case "panel":
-		return PanelSpec{color = color}, true
+		return ui.PanelSpec{color = color}, true
 
 	case "image":
 		atlas_name, has_atlas := script.field_string(s, index, "atlas", "", allocator)
@@ -151,8 +121,8 @@ spec_from_lua :: proc(
 			offset = core.RectOffset{slice[0], slice[1], slice[2], slice[3]}
 		}
 
-		return ImageSpec {
-				panel = PanelSpec{color = color},
+		return ui.ImageSpec {
+				panel = ui.PanelSpec{color = color},
 				atlas_handle = atlas_handle,
 				sprite_name = sprite_name,
 				slice_offset = offset,
@@ -175,8 +145,8 @@ spec_from_lua :: proc(
 
 		size, _ := script.field_number(s, index, "size", 32)
 
-		return TextSpec {
-				panel = PanelSpec{color = color},
+		return ui.TextSpec {
+				panel = ui.PanelSpec{color = color},
 				text = text,
 				font_handle = font_handle,
 				font_size = u32(size),

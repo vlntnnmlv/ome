@@ -27,7 +27,6 @@ Panel :: struct {
 	pressed:          bool,
 }
 
-@(private)
 PanelFlat :: struct {
 	uuid:     string,
 	handle:   PanelHandle,
@@ -73,7 +72,6 @@ panel_create_raw :: proc(
 	}
 }
 
-// @(private)
 panel_flatten :: proc(
 	scene: ^Scene,
 	handle: PanelHandle,
@@ -183,6 +181,8 @@ panel_render :: proc(renderer: ^render.Renderer, scene: ^Scene, handle: PanelHan
 	render.quad(renderer, panel.rect, color, 1, false)
 	switch spec in panel.spec {
 	case PanelSpec:
+		break
+	case ButtonSpec:
 		break
 	case TextSpec:
 		render.text(renderer, spec.text, spec.font_handle, spec.font_size, panel.rect, spec.color)

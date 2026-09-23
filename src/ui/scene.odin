@@ -27,6 +27,7 @@ Click :: struct {
 	panel_handle: PanelHandle,
 	button:       platform.MouseButton,
 	count:        u8,
+	action:       string,
 }
 
 scene_create :: proc(

@@ -5,6 +5,7 @@ import "core:fmt"
 import "core:log"
 import "core:math"
 import "core:mem"
+import "ome:bind"
 
 import "ome:app"
 import "ome:assets"
@@ -93,15 +94,13 @@ main :: proc() {
 	defer script.destroy(script_instance)
 
 	scene := ui.get_scene(&ui_instance, scene_handle)
-	ui.add_lua_view(
-		&ui_instance,
-		scene_handle,
-		scene.root_handle,
-		script_instance,
-		assets_instance,
-		"assets/ui/main.lua",
-	)
 	// ---------
+
+	// --- BIND ---
+	bind_instance := bind.instance(&ui_instance, script_instance, assets_instance)
+	defer bind.destroy(bind_instance)
+
+	bind.add_view(bind_instance, scene_handle, scene.root_handle, "assets/ui/main.lua")
 
 	// --- CAMERAS ---
 	render.get_camera_2d(app_instance.renderer, 1).zoom = 1
@@ -123,13 +122,8 @@ main :: proc() {
 
 
 	// --- LOOP ---
-	reload_timer: f32
 	for app.frame(app_instance) {
-		reload_timer += app_instance.clock.dt
-		if reload_timer > 0.25 {
-			reload_timer = 0
-			ui.check_lua_reloads(&ui_instance, script_instance, assets_instance)
-		}
+		bind.update(bind_instance, app_instance.clock.dt)
 		for click in ui.scene_drain_clicks(scene) {
 			log.infof("clicked %v with %v (x%v)", click.panel_handle, click.button, click.count)
 		}

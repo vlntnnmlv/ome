@@ -9,6 +9,7 @@ Spec :: union {
 	PanelSpec,
 	ImageSpec,
 	TextSpec,
+	ButtonSpec,
 }
 
 PanelSpec :: struct {
@@ -17,7 +18,7 @@ PanelSpec :: struct {
 
 ButtonSpec :: struct {
 	using panel: PanelSpec,
-	action:      proc(ctx: rawptr),
+	action:      string,
 }
 
 ImageSpec :: struct {
@@ -47,16 +48,23 @@ spec_clone :: proc(spec: Spec, allocator: mem.Allocator = context.allocator) -> 
 		s_cloned := s
 		s_cloned.text = strings.clone(s.text, allocator)
 		return s_cloned
+	case ButtonSpec:
+		s_cloned := s
+		s_cloned.action = strings.clone(s.action, allocator)
+		return s_cloned
 	}
 	return spec
 }
 
 @(private)
 spec_destroy :: proc(spec: Spec, allocator := context.allocator) {
-	#partial switch s in spec {
+	switch s in spec {
+	case PanelSpec: // nothing to free
 	case ImageSpec:
 		delete(s.sprite_name, allocator)
 	case TextSpec:
 		delete(s.text, allocator)
+	case ButtonSpec:
+		delete(s.action, allocator)
 	}
 }
