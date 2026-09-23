@@ -128,7 +128,7 @@ panel_unflatten :: proc(
 	allocator: mem.Allocator = context.allocator,
 ) -> PanelHandle {
 	panel := panel_create_raw(
-		strings.clone(panel_flat.uuid, allocator),
+		panel_flat.uuid == "" ? core.uuid_create(allocator) : strings.clone(panel_flat.uuid, allocator),
 		parent_handle,
 		strings.clone(panel_flat.name, allocator),
 		panel_flat.rect,
@@ -152,13 +152,6 @@ panel_unflatten :: proc(
 
 	return handle
 }
-
-// panel_deserialize :: proc(json_string: string, allocator := context.allocator) -> PanelFlat {
-// 	json_bytes := transmute([]byte)json_string
-// 	panel_flat: PanelFlat
-// 	_ := json.unmarshal(json_bytes, &panel_flat)
-// 	return panel_flat
-// }
 
 panel_hit_test :: proc(handle: PanelHandle, scene: ^Scene, position: [2]f32) -> PanelHandle {
 	if handle == EMPTY_HANDLE {

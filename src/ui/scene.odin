@@ -83,6 +83,29 @@ scene_get_panel :: proc(scene: ^Scene, handle: PanelHandle) -> ^Panel {
 	return handle_map.get(scene.panels, handle)
 }
 
+scene_remove_panel :: proc(
+	scene: ^Scene,
+	handle: PanelHandle,
+	allocator: mem.Allocator = context.allocator,
+) {
+	panel := scene_get_panel(scene, handle)
+	if panel == nil do return
+
+	if parent := scene_get_panel(scene, panel.parent_handle); parent != nil {
+		for child_handle, i in parent.children_handles {
+			if child_handle == handle {
+				ordered_remove(&parent.children_handles, i)
+				break
+			}
+		}
+	}
+
+	panel_destroy(scene, panel, allocator)
+
+	scene_clear_input(scene)
+	clear(&scene.clicks)
+}
+
 scene_handle_event :: proc(scene: ^Scene, event: platform.Event) -> bool {
 	#partial switch e in event {
 	case platform.ResizeEvent:

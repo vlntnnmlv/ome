@@ -11,9 +11,8 @@ import "ome:assets"
 import "ome:core"
 import "ome:platform"
 import "ome:render"
+import "ome:script"
 import "ome:ui"
-
-import lua "vendor:lua/5.4"
 
 track_start :: proc(allocator: mem.Allocator) -> (mem.Allocator, ^mem.Tracking_Allocator) {
 	tracking_allocator: ^mem.Tracking_Allocator = new(mem.Tracking_Allocator)
@@ -42,24 +41,7 @@ move_camera :: proc(a: ^app.Instance) {
 }
 
 main :: proc() {
-	L := lua.L_newstate()
-	if L == nil {
-		fmt.eprintln("couldn't create lua state")
-	}
-	defer lua.close(L)
-
-	lua.L_openlibs(L)
-
-	if lua.L_dostring(L, "return 2+3+8") != 0 {
-		fmt.eprintln("lua error:", lua.tostring(L, -1))
-		return
-	}
-
-	fmt.println("lua says:", lua.tostring(L, -1))
-}
-
-main2 :: proc() {
-	// system
+	// --- LEAKS TRACKING ---
 	tracked_allocator, tracking_allocator := track_start(context.allocator)
 	context.allocator = tracked_allocator
 
@@ -68,16 +50,18 @@ main2 :: proc() {
 	opts: bit_set[runtime.Logger_Option] = {.Level}
 	context.logger = log.create_console_logger(opt = opts)
 	defer log.destroy_console_logger(context.logger)
+	// ---------
 
-	// window
+	// --- WINDOW & APP ---
 	width: f32 = 1080
 	height: f32 = 720
 
 	app_instance, ok := app.instance("Ome", cast(i32)width, cast(i32)height)
 	if !ok do return
 	defer app.destroy(app_instance)
+	// ---------
 
-	// resources
+	// --- RESOURCES ---
 	assets_instance := app_instance.renderer.assets
 
 	font_handle, ferr := assets.load_font(
@@ -88,10 +72,11 @@ main2 :: proc() {
 	)
 	assert(ferr == assets.FontError.None)
 
-	atlas_handle, aerr := assets.load_atlas(assets_instance, "assets/textures/ui", "ui_atlas")
+	_, aerr := assets.load_atlas(assets_instance, "assets/textures/ui", "ui_atlas")
 	assert(aerr == assets.AtlasError.None)
+	// ---------
 
-	// create UI
+	// --- UI ---
 	screen_rect := core.Rect{0, 0, width, height}
 	ui_instance := ui.instance()
 	defer ui.destroy(&ui_instance)
@@ -99,40 +84,26 @@ main2 :: proc() {
 	app.add_event_handler(app_instance, &ui_instance, ui.handle_event)
 
 	scene_handle := ui.add_scene(&ui_instance, screen_rect, "main")
-	hud_handle := ui.add_scene(&ui_instance, core.shrink(screen_rect, {100, 100, 100, 100}), "hud")
 	ui.show_scene(&ui_instance, scene_handle)
-	ui.show_scene(&ui_instance, hud_handle)
+	// ---------
 
-	hud := ui.get_scene(&ui_instance, hud_handle)
-	hud.is_modal = true
-	hud.is_following_window = false
-	ui.scene_add_panel(hud, hud.root_handle, "corner", {120, 120, 120, 60}, ui.PanelSpec{})
+	// --- SCRIPT ---
+	script_instance, script_ok := script.instance()
+	if !script_ok do return
+	defer script.destroy(script_instance)
 
 	scene := ui.get_scene(&ui_instance, scene_handle)
-	scene.is_following_window = true
-	_ = ui.scene_add_panel(
-		scene,
+	ui.add_lua_view(
+		&ui_instance,
+		scene_handle,
 		scene.root_handle,
-		"img",
-		{width / 2 - 50, height / 2 - 50, 100, 100},
-		ui.ImageSpec {
-			color = core.Color{255, 255, 255, 255},
-			atlas_handle = atlas_handle,
-			sprite_name = "frame",
-			slice_offset = {8, 8, 8, 8},
-		},
+		script_instance,
+		assets_instance,
+		"assets/ui/main.lua",
 	)
+	// ---------
 
-
-	// flat := ui.panel_flatten(scene, img_handle, context.temp_allocator)
-	// copy_handle := ui.panel_unflatten(scene, scene.root_handle, flat)
-	// a := ui.scene_get_panel(scene, img_handle)
-	// b := ui.scene_get_panel(scene, copy_handle)
-	// ensure(a.name == b.name)
-	// ensure(a.uuid == b.uuid)
-	// ensure(a.rect == b.rect)
-	// ensure(len(a.children_handles) == len(b.children_handles))
-
+	// --- CAMERAS ---
 	render.get_camera_2d(app_instance.renderer, 1).zoom = 1
 
 	render.set_camera_3d(
@@ -148,9 +119,17 @@ main2 :: proc() {
 			viewport = {0, 0, width, height},
 		},
 	)
+	// ---------
 
-	// start the event loop
+
+	// --- LOOP ---
+	reload_timer: f32
 	for app.frame(app_instance) {
+		reload_timer += app_instance.clock.dt
+		if reload_timer > 0.25 {
+			reload_timer = 0
+			ui.check_lua_reloads(&ui_instance, script_instance, assets_instance)
+		}
 		for click in ui.scene_drain_clicks(scene) {
 			log.infof("clicked %v with %v (x%v)", click.panel_handle, click.button, click.count)
 		}
@@ -168,7 +147,7 @@ main2 :: proc() {
 			fmt.tprint(app_instance.clock.dt),
 			font_handle,
 			77,
-			{100, 100, 500, 500},
+			{0, screen_rect.h, 500, 500},
 			core.Color{0, 0, 255, 255},
 		)
 	}
