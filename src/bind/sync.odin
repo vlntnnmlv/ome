@@ -55,7 +55,7 @@ call_hook :: proc(instance: ^Instance, view: ^View, name: cstring, args: ..f64) 
 	if view.module == script.NO_REF || view.broken do return
 
 	err, msg := script.call(instance.script, view.module, nil, name, ..args)
-	if err == .None || err == .Missing_Function do return
+	if err == .None || err == .Missing do return
 
 	view.broken = true
 	log.errorf("bind: %s: %s: %s", view.lua_path, name, msg)

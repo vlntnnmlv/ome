@@ -15,7 +15,6 @@ Error :: enum {
 	Syntax,
 	Runtime,
 	Memory,
-	Missing_Function,
 	Missing,
 }
 
@@ -43,7 +42,7 @@ call :: proc(
 	if table_key != nil {
 		lua.getfield(L, module_idx, table_key)
 		if !lua.istable(L, -1) {
-			return .Missing_Function, fmt.tprintf("module has no '%s' table", table_key)
+			return .Missing, fmt.tprintf("module has no '%s' table", table_key)
 		}
 		container = lua.gettop(L)
 	}
@@ -52,7 +51,7 @@ call :: proc(
 	handler := lua.gettop(L)
 
 	lua.getfield(L, container, name)
-	if !lua.isfunction(L, -1) do return .Missing_Function, fmt.tprintf("no function '%s'", name)
+	if !lua.isfunction(L, -1) do return .Missing, fmt.tprintf("no function '%s'", name)
 
 	lua.getfield(L, module_idx, "model")
 	for a in args do lua.pushnumber(L, lua.Number(a))
