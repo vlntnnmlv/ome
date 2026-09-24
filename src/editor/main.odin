@@ -5,10 +5,11 @@ import "core:fmt"
 import "core:log"
 import "core:math"
 import "core:mem"
-import "ome:bind"
 
+import "ome:api"
 import "ome:app"
 import "ome:assets"
+import "ome:bind"
 import "ome:core"
 import "ome:platform"
 import "ome:render"
@@ -75,6 +76,8 @@ main :: proc() {
 
 	_, aerr := assets.load_atlas(assets_instance, "assets/textures/ui", "ui_atlas")
 	assert(aerr == assets.AtlasError.None)
+	_, aerr = assets.load_atlas(assets_instance, "assets/textures/player", "player_atlas")
+	assert(aerr == assets.AtlasError.None)
 	// ---------
 
 	// --- UI ---
@@ -95,6 +98,17 @@ main :: proc() {
 
 	scene := ui.get_scene(&ui_instance, scene_handle)
 	scene.is_debug = true
+	// ---------
+
+	// --- API ---
+	api_instance := api.instance(
+		app_instance.renderer,
+		app_instance.window,
+		&app_instance.clock,
+		font_handle,
+	)
+	defer api.destroy(api_instance)
+	api.register(api_instance, script_instance)
 
 	// ---------
 
@@ -104,10 +118,10 @@ main :: proc() {
 
 	bind.add_view(
 		bind_instance,
+		"assets/ui/main.lua",
+		"assets/ui/main.json",
 		scene_handle,
 		scene.root_handle,
-		"assets/ui/main.json",
-		"assets/ui/main.lua",
 	)
 
 	// --- CAMERAS ---
@@ -133,12 +147,14 @@ main :: proc() {
 	for app.frame(app_instance) {
 		bind.update(bind_instance, app_instance.clock.dt)
 
-		render.set_camera(app_instance.renderer, 2)
-		move_camera(app_instance)
-		render.cube(app_instance.renderer, {0, 0, 0}, 1, core.Color{0, 255, 0, 255})
 		render.set_camera(app_instance.renderer, 1)
-		render.quad(app_instance.renderer, {400, 400, 30, 30}, core.Color{244, 244, 244, 255})
-		render.set_camera(app_instance.renderer, 0)
+		bind.draw(bind_instance)
+
+		// move_camera(app_instance)
+		// render.cube(app_instance.renderer, {0, 0, 0}, 1, core.Color{0, 255, 0, 255})
+		// render.set_camera(app_instance.renderer, 1)
+		// render.quad(app_instance.renderer, {400, 400, 30, 30}, core.Color{244, 244, 244, 255})
+		// render.set_camera(app_instance.renderer, 0)
 
 		ui.render(app_instance.renderer, &ui_instance)
 		render.text(

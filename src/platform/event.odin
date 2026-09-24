@@ -1,7 +1,5 @@
 package omeplatform
 
-import "core:c"
-
 import SDL "vendor:sdl3"
 
 Key :: enum {
@@ -254,6 +252,7 @@ Key :: enum {
 	AppControlStop       = 284,
 	AppControlRefresh    = 285,
 	AppControlBookmarks  = 286,
+	Count                = 512,
 }
 
 MouseButton :: enum u8 {
@@ -367,36 +366,4 @@ poll_event :: proc(window: ^Window) -> (Event, bool) {
 	}
 
 	return nil, false
-}
-
-key_down :: proc(key: Key) -> bool {
-	numkeys: c.int
-	state := SDL.GetKeyboardState(&numkeys)
-	if state == nil do return false
-	if int(key) < 0 || int(key) >= int(numkeys) do return false
-	return state[int(key)]
-}
-
-mouse_position :: proc() -> [2]f32 {
-	x, y: f32
-	flags := SDL.GetMouseState(&x, &y)
-	_ = flags
-	return {x, y}
-}
-
-mouse_button_down :: proc(button: MouseButton) -> bool {
-	flags := SDL.GetMouseState(nil, nil)
-	#partial switch button {
-	case .Left:
-		return .LEFT in flags
-	case .Middle:
-		return .MIDDLE in flags
-	case .Right:
-		return .RIGHT in flags
-	case .X1:
-		return .X1 in flags
-	case .X2:
-		return .X2 in flags
-	}
-	return false
 }

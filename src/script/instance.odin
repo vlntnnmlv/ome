@@ -15,10 +15,59 @@ Error :: enum {
 	Syntax,
 	Runtime,
 	Memory,
+	Missing_Function,
+	Missing,
 }
 
 Ref :: distinct i32
 NO_REF :: Ref(lua.NOREF)
+
+call :: proc(
+	instance: ^Instance,
+	module: Ref,
+	table_key: cstring,
+	name: cstring,
+	args: ..f64,
+) -> (
+	Error,
+	string,
+) {
+	L := instance.state
+	top := lua.gettop(L)
+	defer lua.settop(L, top)
+
+	lua.rawgeti(L, lua.REGISTRYINDEX, lua.Integer(module))
+	module_idx := lua.gettop(L)
+
+	container := module_idx
+	if table_key != nil {
+		lua.getfield(L, module_idx, table_key)
+		if !lua.istable(L, -1) {
+			return .Missing_Function, fmt.tprintf("module has no '%s' table", table_key)
+		}
+		container = lua.gettop(L)
+	}
+
+	lua.pushcfunction(L, traceback)
+	handler := lua.gettop(L)
+
+	lua.getfield(L, container, name)
+	if !lua.isfunction(L, -1) do return .Missing_Function, fmt.tprintf("no function '%s'", name)
+
+	lua.getfield(L, module_idx, "model")
+	for a in args do lua.pushnumber(L, lua.Number(a))
+
+	if rc := lua.pcall(L, c.int(1 + len(args)), 0, handler); rc != 0 {
+		return status_to_error(lua.Status(rc)), pop_message(instance, context.temp_allocator)
+	}
+	return .None, ""
+}
+
+@(private)
+traceback :: proc "c" (L: ^lua.State) -> c.int {
+	lua.L_traceback(L, L, lua.tostring(L, 1), 1)
+	return 1
+}
 
 @(private)
 ref_top :: proc(instance: ^Instance) -> Ref {
@@ -41,31 +90,6 @@ load_module :: proc(instance: ^Instance, path: string) -> (Ref, bool) {
 		return NO_REF, false
 	}
 	return ref_top(instance), true
-}
-
-@(private)
-push_module_table :: proc(instance: ^Instance, module: Ref, table_key: cstring) -> bool {
-	lua.rawgeti(instance.state, lua.REGISTRYINDEX, lua.Integer(module))
-	lua.getfield(instance.state, -1, table_key)
-	return lua.istable(instance.state, -1)
-}
-
-call_action :: proc(instance: ^Instance, module: Ref, name: string) -> (Error, string) {
-	L := instance.state
-	top := lua.gettop(L)
-	defer lua.settop(L, top)
-
-	push_module_table(instance, module, "actions")
-
-	cname := strings.clone_to_cstring(name, context.temp_allocator)
-	lua.getfield(L, -1, cname)
-	if !lua.isfunction(L, -1) do return .Runtime, fmt.tprintf("no action '%s'", name)
-
-	lua.getfield(L, -3, "model")
-	if rc := lua.pcall(L, 1, 0, 0); rc != 0 {
-		return status_to_error(lua.Status(rc)), pop_message(instance, context.temp_allocator)
-	}
-	return .None, ""
 }
 
 Instance :: struct {
@@ -117,73 +141,51 @@ pop :: proc(instance: ^Instance, n: int = 1) {
 	lua.pop(instance.state, c.int(n))
 }
 
-@(private)
-push_field :: proc(instance: ^Instance, index: i32, key: string) -> bool {
-	ckey := strings.clone_to_cstring(key, context.temp_allocator)
-	lua.getfield(instance.state, c.int(index), ckey)
-	if !lua.istable(instance.state, -1) {
-		lua.pop(instance.state, 1)
-		return false
-	}
-	return true
-}
-
 get_string :: proc(
 	instance: ^Instance,
 	module: Ref,
-	table_key: cstring,
-	key: string,
+	path: string,
 	allocator := context.temp_allocator,
 ) -> (
 	string,
-	bool,
+	Error,
+	string,
 ) {
 	L := instance.state
 	top := lua.gettop(L)
 	defer lua.settop(L, top)
 
-	push_module_table(instance, module, table_key)
+	if err, msg := push_bound(instance, module, path); err != .None do return "", err, msg
+	s := lua.L_tostring(L, -1)
 
-	ckey := strings.clone_to_cstring(key, context.temp_allocator)
-	lua.getfield(L, -1, ckey) // module, tbl, value
-	if lua.isnil(L, -1) do return "", false
-
-	s := lua.L_tostring(L, -1) // module, tbl, value, str
-	return strings.clone(string(s), allocator), true
+	return strings.clone(string(s), allocator), .None, ""
 }
 
 get_numbers :: proc(
 	instance: ^Instance,
 	module: Ref,
-	table_key: cstring,
-	key: string,
+	path: string,
 	out: []f32,
-) -> bool {
+) -> (
+	Error,
+	string,
+) {
 	L := instance.state
 	top := lua.gettop(L)
 	defer lua.settop(L, top)
 
-	push_module_table(instance, module, table_key)
-
-	return field_numbers(instance, -1, key, out)
-}
-
-@(private)
-field_numbers :: proc(instance: ^Instance, index: i32, key: string, out: []f32) -> bool {
-	if !push_field(instance, index, key) do return false
-	defer lua.pop(instance.state, 1)
-
-	if array_len(instance, -1) < len(out) do return false
+	if err, msg := push_bound(instance, module, path); err != .None do return err, msg
+	if !lua.istable(L, -1) || array_len(instance, -1) < len(out) do return .Missing, ""
 
 	for i in 0 ..< len(out) {
-		lua.rawgeti(instance.state, -1, lua.Integer(i + 1))
+		lua.rawgeti(L, -1, lua.Integer(i + 1))
 		is_number: b32
-		n := lua.tonumber(instance.state, -1, &is_number)
-		lua.pop(instance.state, 1)
-		if !is_number do return false
+		n := lua.tonumber(L, -1, &is_number)
+		lua.pop(L, 1)
+		if !is_number do return .Missing, ""
 		out[i] = f32(n)
 	}
-	return true
+	return .None, ""
 }
 
 @(private)
@@ -233,6 +235,45 @@ status_to_error :: proc(status: lua.Status) -> Error {
 		return .Memory
 	}
 	return .Runtime
+}
+
+@(private)
+resolve :: proc "c" (L: ^lua.State) -> c.int {
+	lua.getfield(L, 1, "computed")
+	if lua.istable(L, -1) {
+		lua.pushvalue(L, 2)
+		lua.gettable(L, -2)
+		if lua.isfunction(L, -1) {
+			lua.getfield(L, 1, "model")
+			lua.call(L, 1, 1)
+			return 1
+		}
+		lua.pop(L, 1)
+	}
+	lua.pop(L, 1)
+
+	lua.getfield(L, 1, "model")
+	if !lua.istable(L, -1) do return 0 // pcall pads the missing result with nil
+	lua.pushvalue(L, 2)
+	lua.gettable(L, -2)
+	return 1
+}
+
+@(private)
+push_bound :: proc(instance: ^Instance, module: Ref, path: string) -> (Error, string) {
+	L := instance.state
+	lua.pushcfunction(L, traceback)
+	handler := lua.gettop(L)
+
+	lua.pushcfunction(L, resolve)
+	lua.rawgeti(L, lua.REGISTRYINDEX, lua.Integer(module))
+	lua.pushstring(L, strings.clone_to_cstring(path, context.temp_allocator))
+
+	if rc := lua.pcall(L, 2, 1, handler); rc != 0 {
+		return status_to_error(lua.Status(rc)), pop_message(instance, context.temp_allocator)
+	}
+	if lua.isnil(L, -1) do return .Missing, ""
+	return .None, ""
 }
 
 destroy :: proc(instance: ^Instance) {

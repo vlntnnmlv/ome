@@ -2,7 +2,6 @@ package omebind
 
 import "core:log"
 import "core:mem"
-import "core:os"
 import "core:strings"
 import "core:time"
 
@@ -29,6 +28,7 @@ View :: struct {
 	json_mtime:    time.Time,
 	lua_mtime:     time.Time,
 	module:        script.Ref,
+	broken:        bool,
 }
 
 instance :: proc(
@@ -49,12 +49,12 @@ instance :: proc(
 
 add_view :: proc(
 	instance: ^Instance,
-	scene_handle: ui.SceneHandle,
-	parent_handle: ui.PanelHandle,
-	json_path: string,
 	lua_path: string,
+	json_path: string = "",
+	scene_handle: ui.SceneHandle = {},
+	parent_handle: ui.PanelHandle = ui.EMPTY_HANDLE,
 ) -> bool {
-	if ui.get_scene(instance.ui, scene_handle) == nil do return false
+	if json_path != "" && ui.get_scene(instance.ui, scene_handle) == nil do return false
 
 	append(
 		&instance.views,
@@ -68,13 +68,15 @@ add_view :: proc(
 		},
 	)
 	view := &instance.views[len(instance.views) - 1]
-	view_sync_json(instance, view)
-	view_sync_lua(instance, view)
 
-	if view.root_handle == ui.EMPTY_HANDLE {
+	view_sync_json(instance, view)
+	if view.json_path != "" && view.root_handle == ui.EMPTY_HANDLE {
 		log.errorf("bind: view %s has no panels", json_path)
 		return false
 	}
+
+	view_sync_lua(instance, view)
+
 	return true
 }
 
@@ -90,51 +92,13 @@ update :: proc(instance: ^Instance, dt: f32) {
 		}
 	}
 
+	for &view in instance.views do call_hook(instance, &view, "update", f64(dt))
+
 	refresh_bindings(instance)
 }
 
-@(private)
-reload_json :: proc(instance: ^Instance) {
-	for &view in instance.views {
-		mtime, err := os.last_write_time_by_name(view.json_path)
-		if err != nil || mtime == view.json_mtime do continue
-
-		view.json_mtime = mtime
-
-		scene := ui.get_scene(instance.ui, view.scene_handle)
-		if scene == nil do continue
-
-		desc, ok := read_view_json(instance, view.json_path)
-		if !ok {
-			log.warnf("bind: %s failed to reload, keeping previous tree", view.json_path)
-			continue
-		}
-
-		if view.root_handle != ui.EMPTY_HANDLE {
-			ui.scene_remove_panel(scene, view.root_handle)
-		}
-		view.root_handle = ui.panel_from_desc(scene, view.parent_handle, desc)
-		log.infof("bind: reloaded %s", view.json_path)
-	}
-}
-
-@(private)
-reload_lua :: proc(instance: ^Instance) {
-	for &view in instance.views {
-		if view.lua_path == "" do continue
-
-		lua_mtime, err := os.last_write_time_by_name(view.lua_path)
-		if err == nil && lua_mtime != view.lua_mtime {
-			view.lua_mtime = lua_mtime
-			if module_ref, ok := script.load_module(instance.script, view.lua_path); ok {
-				script.unref(instance.script, view.module)
-				view.module = module_ref
-				log.infof("bind: reloaded %s", view.lua_path)
-			} else {
-				log.warnf("bind: %s failed to reload, keeping previous actions", view.lua_path)
-			}
-		}
-	}
+draw :: proc(instance: ^Instance) {
+	for &view in instance.views do call_hook(instance, &view, "draw")
 }
 
 @(private)
@@ -155,7 +119,8 @@ dispatch_clicks :: proc(instance: ^Instance) {
 				)
 				continue
 			}
-			if err, msg := script.call_action(instance.script, view.module, click.action);
+			cname := strings.clone_to_cstring(click.action, context.temp_allocator)
+			if err, msg := script.call(instance.script, view.module, "actions", cname);
 			   err != .None {
 				log.errorf("bind: %s: action '%s': %s", view.lua_path, click.action, msg)
 			}

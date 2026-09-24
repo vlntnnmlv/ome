@@ -8,6 +8,8 @@ import "ome:ui"
 
 @(private)
 view_sync_json :: proc(instance: ^Instance, view: ^View) {
+	if view.json_path == "" do return
+
 	mtime, mtime_err := os.last_write_time_by_name(view.json_path)
 	if mtime_err != nil || mtime == view.json_mtime do return
 	view.json_mtime = mtime
@@ -44,7 +46,20 @@ view_sync_lua :: proc(instance: ^Instance, view: ^View) {
 
 	script.unref(instance.script, view.module)
 	view.module = module
+	view.broken = false
 	log.infof("bind: loaded %s", view.lua_path)
+}
+
+@(private)
+call_hook :: proc(instance: ^Instance, view: ^View, name: cstring, args: ..f64) {
+	if view.module == script.NO_REF || view.broken do return
+
+	err, msg := script.call(instance.script, view.module, nil, name, ..args)
+	if err == .None || err == .Missing_Function do return
+
+	view.broken = true
+	log.errorf("bind: %s: %s: %s", view.lua_path, name, msg)
+	log.warnf("bind: %s hooks paused until the file is saved again", view.lua_path)
 }
 
 @(private)

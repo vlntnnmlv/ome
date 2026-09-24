@@ -132,6 +132,9 @@ frame :: proc(instance: ^Instance) -> bool {
 	if instance.frame_open do frame_end(instance)
 
 	process_events(instance)
+
+	platform.input_update()
+
 	if instance.quit do return false
 
 	render.begin(instance.renderer)
