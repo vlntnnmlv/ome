@@ -33,13 +33,25 @@ track_finish :: proc(tracking_allocator: ^mem.Tracking_Allocator) {
 	mem.tracking_allocator_destroy(tracking_allocator)
 }
 
-move_camera :: proc(a: ^app.Instance) {
-	if platform.key_down(.V) do render.get_camera_2d(a.renderer, 1).zoom += 0.1
-	if platform.key_down(.C) do render.get_camera_2d(a.renderer, 1).zoom -= 0.1
-	if platform.key_down(.W) do render.get_camera_2d(a.renderer, 1).position.y -= 10 * a.clock.dt
-	if platform.key_down(.A) do render.get_camera_2d(a.renderer, 1).position.x -= 10 * a.clock.dt
-	if platform.key_down(.S) do render.get_camera_2d(a.renderer, 1).position.y += 10 * a.clock.dt
-	if platform.key_down(.D) do render.get_camera_2d(a.renderer, 1).position.x += 10 * a.clock.dt
+move_camera :: proc(a: ^app.Engine) {
+	if platform.key_down(.V) {
+		render.renderer_get_camera2d(a.renderer, 1).zoom += 0.1
+	}
+	if platform.key_down(.C) {
+		render.renderer_get_camera2d(a.renderer, 1).zoom -= 0.1
+	}
+	if platform.key_down(.W) {
+		render.renderer_get_camera2d(a.renderer, 1).position.y -= 10 * a.clock.dt
+	}
+	if platform.key_down(.A) {
+		render.renderer_get_camera2d(a.renderer, 1).position.x -= 10 * a.clock.dt
+	}
+	if platform.key_down(.S) {
+		render.renderer_get_camera2d(a.renderer, 1).position.y += 10 * a.clock.dt
+	}
+	if platform.key_down(.D) {
+		render.renderer_get_camera2d(a.renderer, 1).position.x += 10 * a.clock.dt
+	}
 }
 
 main :: proc() {
@@ -58,66 +70,65 @@ main :: proc() {
 	width: f32 = 1080
 	height: f32 = 720
 
-	app_instance, ok := app.instance("Ome", cast(i32)width, cast(i32)height)
-	if !ok do return
-	defer app.destroy(app_instance)
+	engine, engine_ok := app.engine_create("Ome", i32(width), i32(height))
+	if !engine_ok {
+		return
+	}
+	defer app.engine_destroy(engine)
 	// ---------
 
 	// --- RESOURCES ---
-	assets_instance := app_instance.renderer.assets
+	library := engine.renderer.library
 
-	font_handle, ferr := assets.load_font(
-		assets_instance,
+	font_handle, ferr := assets.library_load_font(
+		library,
 		"assets/fonts/Iosevka.ttf",
 		"iosevka",
 		{32, 64},
 	)
-	assert(ferr == assets.FontError.None)
+	assert(ferr == .None)
 
-	_, aerr := assets.load_atlas(assets_instance, "assets/textures/ui", "ui_atlas")
-	assert(aerr == assets.AtlasError.None)
-	_, aerr = assets.load_atlas(assets_instance, "assets/textures/player", "player_atlas")
-	assert(aerr == assets.AtlasError.None)
+	_, aerr := assets.library_load_atlas(library, "assets/textures/ui", "ui_atlas")
+	assert(aerr == .None)
+	_, aerr = assets.library_load_atlas(library, "assets/textures/player", "player_atlas")
+	assert(aerr == .None)
 	// ---------
 
 	// --- UI ---
 	screen_rect := core.Rect{0, 0, width, height}
-	ui_instance := ui.instance()
-	defer ui.destroy(&ui_instance)
+	stage := ui.stage_create()
+	defer ui.stage_destroy(stage)
 
-	app.add_event_handler(app_instance, &ui_instance, ui.handle_event)
+	app.engine_add_event_handler(engine, stage, ui.stage_handle_event)
 
-	scene_handle := ui.add_scene(&ui_instance, screen_rect, "main")
-	ui.show_scene(&ui_instance, scene_handle)
+	scene_handle := ui.stage_add_scene(stage, "main", screen_rect)
+	ui.stage_show_scene(stage, scene_handle)
 	// ---------
 
 	// --- SCRIPT ---
-	script_instance, script_ok := script.instance()
-	if !script_ok do return
-	defer script.destroy(script_instance)
+	vm, vm_ok := script.vm_create()
+	if !vm_ok {
+		return
+	}
+	defer script.vm_destroy(vm)
 
-	scene := ui.get_scene(&ui_instance, scene_handle)
-	scene.is_debug = true
+	scene := ui.stage_get_scene(stage, scene_handle)
+	scene.debug = true
 	// ---------
 
 	// --- API ---
-	api_instance := api.instance(
-		app_instance.renderer,
-		app_instance.window,
-		&app_instance.clock,
-		font_handle,
-	)
-	defer api.destroy(api_instance)
-	api.register(api_instance, script_instance)
+	host := api.host_create(engine.renderer, engine.window, &engine.clock, font_handle)
+	defer api.host_destroy(host)
+	api.host_register(host, vm)
 
 	// ---------
 
 	// --- BIND ---
-	bind_instance := bind.instance(&ui_instance, script_instance, assets_instance)
-	defer bind.destroy(bind_instance)
+	binder := bind.binder_create(stage, vm, library)
+	defer bind.binder_destroy(binder)
 
-	bind.add_view(
-		bind_instance,
+	bind.binder_add_view(
+		binder,
 		"assets/ui/main.lua",
 		"assets/ui/main.json",
 		scene_handle,
@@ -125,10 +136,10 @@ main :: proc() {
 	)
 
 	// --- CAMERAS ---
-	render.get_camera_2d(app_instance.renderer, 1).zoom = 1
+	render.renderer_get_camera2d(engine.renderer, 1).zoom = 1
 
-	render.set_camera_3d(
-		app_instance.renderer,
+	render.renderer_set_camera3d(
+		engine.renderer,
 		2,
 		core.Camera3D {
 			position = {3, 3, 5},
@@ -144,22 +155,16 @@ main :: proc() {
 
 
 	// --- LOOP ---
-	for app.frame(app_instance) {
-		bind.update(bind_instance, app_instance.clock.dt)
+	for app.engine_next_frame(engine) {
+		bind.binder_update(binder, engine.clock.dt)
 
-		render.set_camera(app_instance.renderer, 1)
-		bind.draw(bind_instance)
+		render.renderer_set_camera(engine.renderer, 1)
+		bind.binder_draw(binder)
 
-		// move_camera(app_instance)
-		// render.cube(app_instance.renderer, {0, 0, 0}, 1, core.Color{0, 255, 0, 255})
-		// render.set_camera(app_instance.renderer, 1)
-		// render.quad(app_instance.renderer, {400, 400, 30, 30}, core.Color{244, 244, 244, 255})
-		// render.set_camera(app_instance.renderer, 0)
-
-		ui.render(app_instance.renderer, &ui_instance)
+		ui.stage_render(stage, engine.renderer)
 		render.text(
-			app_instance.renderer,
-			fmt.tprint(app_instance.clock.fps),
+			engine.renderer,
+			fmt.tprint(engine.clock.fps),
 			font_handle,
 			77,
 			{0, screen_rect.h, 500, 500},

@@ -13,7 +13,7 @@ ZERO_RECT :: Rect{0, 0, 0, 0}
 ZERO_RECT_OFFSET :: RectOffset{0, 0, 0, 0}
 
 
-shrink :: proc(rect: Rect, rect_offset: RectOffset) -> Rect {
+rect_shrink :: proc(rect: Rect, rect_offset: RectOffset) -> Rect {
 	return Rect {
 		rect.x + rect_offset.left,
 		rect.y + rect_offset.top,
@@ -22,7 +22,7 @@ shrink :: proc(rect: Rect, rect_offset: RectOffset) -> Rect {
 	}
 }
 
-contains :: proc(rect: Rect, position: [2]f32) -> bool {
+rect_contains :: proc(rect: Rect, position: [2]f32) -> bool {
 	return(
 		position.x >= rect.x &&
 		position.x <= rect.x + rect.w &&
@@ -31,7 +31,7 @@ contains :: proc(rect: Rect, position: [2]f32) -> bool {
 	)
 }
 
-split_to_grid :: proc(rect: Rect, offset: RectOffset) -> [9]Rect {
+rect_split_to_grid :: proc(rect: Rect, offset: RectOffset) -> [9]Rect {
 	xs := [4]f32{rect.x, rect.x + offset.left, rect.x + rect.w - offset.right, rect.x + rect.w}
 	ys := [4]f32{rect.y, rect.y + offset.top, rect.y + rect.h - offset.bottom, rect.y + rect.h}
 

@@ -23,7 +23,7 @@ buffer_create :: proc($T: typeid, device: ^MTL.Device) -> Buffer(T) {
 	buffer.caps = INITIAL_BUFFER_SIZE
 	for slot in 0 ..< GPU_BUFFERS_RING_SIZE {
 		buffer.gpu_ring[slot] = buffer.device->newBufferWithLength(
-			cast(NS.UInteger)buffer.caps[slot] * size_of(T),
+			NS.UInteger(buffer.caps[slot]) * size_of(T),
 			{},
 		)
 	}
@@ -35,13 +35,13 @@ buffer_append :: proc(buffer: ^Buffer($T), data: []T) {
 	append(&buffer.cpu, ..data)
 }
 
-buffer_fill_zeros_n :: proc(buffer: ^Buffer($T), n: int) {
+buffer_zeros :: proc(buffer: ^Buffer($T), n: int) {
 	old := len(buffer.cpu)
 	resize(&buffer.cpu, old + n)
 	slice.fill(buffer.cpu[old:], T{})
 }
 
-buffer_fill_n :: proc(buffer: ^Buffer($T), value: T, n: int) {
+buffer_fill :: proc(buffer: ^Buffer($T), value: T, n: int) {
 	old := len(buffer.cpu)
 	resize(&buffer.cpu, old + n)
 	slice.fill(buffer.cpu[old:], value)
@@ -54,10 +54,12 @@ buffer_clear :: proc(buffer: ^Buffer($T)) {
 buffer_submit :: proc(buffer: ^Buffer($T), slot: int) {
 	if buffer.caps[slot] < len(buffer.cpu) {
 		buffer.gpu_ring[slot]->release()
-		for buffer.caps[slot] < len(buffer.cpu) do buffer.caps[slot] *= 2
+		for buffer.caps[slot] < len(buffer.cpu) {
+			buffer.caps[slot] *= 2
+		}
 
 		buffer.gpu_ring[slot] = buffer.device->newBufferWithLength(
-			cast(NS.UInteger)buffer.caps[slot] * size_of(T),
+			NS.UInteger(buffer.caps[slot]) * size_of(T),
 			{},
 		)
 	}

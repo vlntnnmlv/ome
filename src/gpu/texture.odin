@@ -1,6 +1,5 @@
 package omegpu
 
-import "base:runtime"
 import "core:strings"
 
 import NS "core:sys/darwin/Foundation"
@@ -14,7 +13,7 @@ MAX_TEXTURES :: 256
 
 Texture :: struct {
 	handle: TextureHandle,
-	data:   ^MTL.Texture,
+	native: ^MTL.Texture,
 }
 
 TextureData :: struct {
@@ -33,12 +32,12 @@ texture_create :: proc(
 	bind_table: ^BindTable,
 	path: string,
 	name: string,
-	format: TextureFormat = {.RGBA8Unorm_sRGB, 4},
+	format: PixelFormat = .RGBA8_Unorm_sRGB,
 ) -> TextureHandle {
 	w, h, channels: i32
 
 	cpath := strings.clone_to_cstring(path)
-	pixels := STBI.load(cpath, &w, &h, &channels, format.channels)
+	pixels := STBI.load(cpath, &w, &h, &channels, pixel_format_to_channels(format))
 	defer STBI.image_free(pixels)
 	defer delete(cpath)
 
@@ -53,20 +52,44 @@ texture_create :: proc(
 	return texture_create_from_data(bind_table, texture_data, format)
 }
 
-TextureFormat :: struct {
-	pixels:   MTL.PixelFormat,
-	channels: i32,
+PixelFormat :: enum {
+	R8_Unorm = 0,
+	RGBA8_Unorm_sRGB,
+}
+
+@(private)
+pixel_format_to_metal :: proc(pixel_format: PixelFormat) -> MTL.PixelFormat {
+	switch pixel_format {
+	case .R8_Unorm:
+		return .R8Unorm
+	case .RGBA8_Unorm_sRGB:
+		return .RGBA8Unorm_sRGB
+	}
+
+	return .Invalid
+}
+
+@(private)
+pixel_format_to_channels :: proc(pixel_format: PixelFormat) -> i32 {
+	switch pixel_format {
+	case .R8_Unorm:
+		return 1
+	case .RGBA8_Unorm_sRGB:
+		return 4
+	}
+
+	return 0
 }
 
 texture_create_from_data :: proc(
 	bind_table: ^BindTable,
 	texture_data: TextureData,
-	format: TextureFormat = {.RGBA8Unorm_sRGB, 4},
+	format: PixelFormat = .RGBA8_Unorm_sRGB,
 ) -> TextureHandle {
 	desc := MTL.TextureDescriptor.texture2DDescriptorWithPixelFormat(
-		format.pixels,
-		cast(NS.UInteger)texture_data.width,
-		cast(NS.UInteger)texture_data.height,
+		pixel_format_to_metal(format),
+		NS.UInteger(texture_data.width),
+		NS.UInteger(texture_data.height),
 		false,
 	)
 	desc->setStorageMode(.Shared)
@@ -75,17 +98,17 @@ texture_create_from_data :: proc(
 	texture := bind_table.device->newTextureWithDescriptor(desc)
 	region := MTL.Region {
 		origin = {0, 0, 0},
-		size   = {cast(NS.Integer)texture_data.width, cast(NS.Integer)texture_data.height, 1},
+		size   = {NS.Integer(texture_data.width), NS.Integer(texture_data.height), 1},
 	}
 	texture->replaceRegion(
 		region,
 		0,
 		texture_data.pixels,
-		cast(NS.UInteger)(texture_data.width * format.channels),
+		NS.UInteger(texture_data.width * pixel_format_to_channels(format)),
 	)
 
-	handle, err := handle_map.add(&bind_table.textures, Texture{data = texture})
-	assert(err == runtime.Allocator_Error.None)
+	handle, err := handle_map.add(&bind_table.textures, Texture{native = texture})
+	assert(err == nil)
 
 	bind_table_rebuild(bind_table)
 
@@ -96,18 +119,36 @@ texture_write :: proc(
 	bind_table: ^BindTable,
 	handle: TextureHandle,
 	pixels: [^]byte,
-	format: TextureFormat,
+	format: PixelFormat,
 ) {
 	texture := handle_map.get(bind_table.textures, handle)
-	if texture == nil do return
+	if texture == nil {
+		return
+	}
 
-	w := texture.data->width()
-	h := texture.data->height()
+	w := texture.native->width()
+	h := texture.native->height()
 	region := MTL.Region {
 		origin = {0, 0, 0},
-		size   = {cast(NS.Integer)w, cast(NS.Integer)h, 1},
+		size   = {NS.Integer(w), NS.Integer(h), 1},
 	}
-	texture.data->replaceRegion(region, 0, pixels, w * cast(NS.UInteger)format.channels)
+	texture.native->replaceRegion(
+		region,
+		0,
+		pixels,
+		w * NS.UInteger(pixel_format_to_channels(format)),
+	)
+}
+
+texture_size :: proc(bind_table: ^BindTable, handle: TextureHandle) -> ([2]f32, bool) {
+	tex := handle_map.get(bind_table.textures, handle)
+	if tex == nil {
+		return {0, 0}, false
+	}
+
+	tw := f32(tex.native->width())
+	th := f32(tex.native->height())
+	return {tw, th}, true
 }
 
 texture_destroy :: proc(bind_table: ^BindTable, handle: TextureHandle) {
@@ -116,7 +157,7 @@ texture_destroy :: proc(bind_table: ^BindTable, handle: TextureHandle) {
 		return
 	}
 
-	texture.data->release()
+	texture.native->release()
 	handle_map.remove(&bind_table.textures, handle)
 
 	bind_table_rebuild(bind_table)

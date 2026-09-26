@@ -15,7 +15,11 @@ srgb_to_linear_lut: [256]f32
 build_srgb_lut :: proc "contextless" () {
 	for i in 0 ..< 256 {
 		c := f32(i) / 255.0
-		srgb_to_linear_lut[i] = c <= 0.04045 ? c / 12.92 : math.pow((c + 0.055) / 1.055, 2.4)
+		if c <= 0.04045 {
+			srgb_to_linear_lut[i] = c
+		} else {
+			srgb_to_linear_lut[i] = math.pow((c + 0.055) / 1.055, 2.4)
+		}
 	}
 }
 

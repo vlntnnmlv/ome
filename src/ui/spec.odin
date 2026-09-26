@@ -2,6 +2,7 @@ package omeui
 
 import "core:mem"
 import "core:strings"
+
 import "ome:assets"
 import "ome:core"
 
@@ -57,7 +58,7 @@ spec_clone :: proc(spec: Spec, allocator: mem.Allocator = context.allocator) -> 
 }
 
 @(private)
-spec_destroy :: proc(spec: Spec, allocator := context.allocator) {
+spec_destroy :: proc(spec: Spec, allocator: mem.Allocator = context.allocator) {
 	switch s in spec {
 	case PanelSpec: // nothing to free
 	case ImageSpec:

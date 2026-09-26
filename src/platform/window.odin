@@ -15,41 +15,46 @@ WindowInfo :: struct {
 }
 
 Window :: struct {
-	handle: ^SDL.Window,
+	native: ^SDL.Window,
 	info:   WindowInfo,
 }
 
 window_create :: proc(title: cstring, logical_width, logical_height: i32) -> (^Window, bool) {
-	environment := SDL.GetEnvironment()
-	SDL.SetEnvironmentVariable(environment, "METAL_DEVICE_WRAPPER_TYPE", "1", false)
+	window_pre_init()
 
 	if ok := SDL.InitSubSystem({.VIDEO}); !ok {
-		log.errorf("SDL Video subsystem couldn't initialize: %v", SDL.GetError())
+		log.errorf(
+			"platform/window: sdl video subsystem failed to initialize woth error %v",
+			SDL.GetError(),
+		)
 		return nil, false
 	}
 
-	handle := SDL.CreateWindow(
+	native := SDL.CreateWindow(
 		title,
 		logical_width,
 		logical_height,
 		{.HIGH_PIXEL_DENSITY, .HIDDEN, .RESIZABLE},
 	)
 
-	if handle == nil {
-		log.errorf("SDL window couldn't initialize: %v", SDL.GetError())
+	if native == nil {
+		log.errorf(
+			"platform/window: sdl window failed to initialize with error %v",
+			SDL.GetError(),
+		)
 		return nil, false
 	}
 
 	window := new(Window)
-	window.handle = handle
+	window.native = native
 	window_refresh_info(window)
 	return window, true
 }
 
 window_refresh_info :: proc(window: ^Window) {
 	logical_width, logical_height, pixel_width, pixel_height: i32
-	SDL.GetWindowSize(window.handle, &logical_width, &logical_height)
-	SDL.GetWindowSizeInPixels(window.handle, &pixel_width, &pixel_height)
+	SDL.GetWindowSize(window.native, &logical_width, &logical_height)
+	SDL.GetWindowSizeInPixels(window.native, &pixel_width, &pixel_height)
 
 	window.info = WindowInfo {
 		logical_width  = int(logical_width),
@@ -61,11 +66,11 @@ window_refresh_info :: proc(window: ^Window) {
 }
 
 window_show :: proc(window: ^Window) {
-	SDL.ShowWindow(window.handle)
+	SDL.ShowWindow(window.native)
 }
 
 window_destroy :: proc(window: ^Window) {
-	SDL.DestroyWindow(window.handle)
+	SDL.DestroyWindow(window.native)
 	SDL.Quit()
 	free(window)
 }

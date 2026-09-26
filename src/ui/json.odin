@@ -3,16 +3,16 @@ package omeui
 import "core:encoding/json"
 import "core:log"
 import "core:mem"
-import "ome:core"
 
 import "ome:assets"
+import "ome:core"
 
-panel_desc_from_json :: proc(
-	assets_i: ^assets.Instance,
+panel_description_from_json :: proc(
+	library: ^assets.Library,
 	data: []byte,
 	allocator: mem.Allocator,
 ) -> (
-	PanelDesc,
+	PanelDescription,
 	bool,
 ) {
 	value, err := json.parse(data, allocator = allocator)
@@ -27,16 +27,16 @@ panel_desc_from_json :: proc(
 		return {}, false
 	}
 
-	return panel_desc_from_object(assets_i, obj, allocator)
+	return panel_description_from_object(library, obj, allocator)
 }
 
 @(private)
-panel_desc_from_object :: proc(
-	assets_i: ^assets.Instance,
+panel_description_from_object :: proc(
+	library: ^assets.Library,
 	obj: json.Object,
 	allocator: mem.Allocator,
 ) -> (
-	flat: PanelDesc,
+	description: PanelDescription,
 	ok: bool,
 ) {
 	name, _ := json_string(obj, "name", "unnamed")
@@ -47,14 +47,16 @@ panel_desc_from_object :: proc(
 		return {}, false
 	}
 
-	spec, spec_ok := spec_from_object(assets_i, obj)
-	if !spec_ok do return {}, false
+	spec, spec_ok := spec_from_object(library, obj)
+	if !spec_ok {
+		return {}, false
+	}
 
-	flat = PanelDesc {
+	description = PanelDescription {
 		name     = name,
 		rect     = core.Rect{r[0], r[1], r[2], r[3]},
 		spec     = spec,
-		children = make([dynamic]PanelDesc, allocator),
+		children = make([dynamic]PanelDescription, allocator),
 		bindings = make([dynamic]Binding, allocator),
 	}
 
@@ -66,8 +68,10 @@ panel_desc_from_object :: proc(
 				continue
 			}
 
-			child, child_ok := panel_desc_from_object(assets_i, child_obj, allocator)
-			if child_ok do append(&flat.children, child)
+			child, child_ok := panel_description_from_object(library, child_obj, allocator)
+			if child_ok {
+				append(&description.children, child)
+			}
 		}
 	}
 
@@ -90,15 +94,15 @@ panel_desc_from_object :: proc(
 				continue
 			}
 
-			append(&flat.bindings, Binding{target = target, path = string(path)})
+			append(&description.bindings, Binding{target = target, path = string(path)})
 		}
 	}
 
-	return flat, true
+	return description, true
 }
 
 @(private)
-spec_from_object :: proc(assets_i: ^assets.Instance, obj: json.Object) -> (Spec, bool) {
+spec_from_object :: proc(library: ^assets.Library, obj: json.Object) -> (Spec, bool) {
 	kind, _ := json_string(obj, "kind", "panel")
 
 	color := core.Color{255, 255, 255, 255}
@@ -119,7 +123,7 @@ spec_from_object :: proc(assets_i: ^assets.Instance, obj: json.Object) -> (Spec,
 			return nil, false
 		}
 
-		atlas_handle, found := assets.atlas_by_name(assets_i, atlas_name)
+		atlas_handle, found := assets.library_find_atlas(library, atlas_name)
 		if !found {
 			log.warnf("ui/json: unknown atlas '%s'", atlas_name)
 			return nil, false
@@ -147,7 +151,7 @@ spec_from_object :: proc(assets_i: ^assets.Instance, obj: json.Object) -> (Spec,
 			return nil, false
 		}
 
-		font_handle, found := assets.font_by_name(assets_i, font_name)
+		font_handle, found := assets.library_find_font(library, font_name)
 		if !found {
 			log.warnf("ui/json: unknown font '%s'", font_name)
 			return nil, false
@@ -178,24 +182,32 @@ spec_from_object :: proc(assets_i: ^assets.Instance, obj: json.Object) -> (Spec,
 @(private = "file")
 json_string :: proc(obj: json.Object, key: string, fallback := "") -> (string, bool) {
 	str, ok := obj[key].(json.String)
-	if ok do return string(str), true
+	if ok {
+		return string(str), true
+	}
 	return fallback, false
 }
 
 @(private = "file")
 json_number :: proc(obj: json.Object, key: string, fallback: f32 = 0) -> f32 {
 	n, ok := obj[key].(json.Float)
-	if ok do return f32(n)
+	if ok {
+		return f32(n)
+	}
 	return fallback
 }
 
 @(private = "file")
 json_numbers :: proc(obj: json.Object, key: string, out: []f32) -> bool {
 	arr, ok := obj[key].(json.Array)
-	if !ok || len(arr) < len(out) do return false
+	if !ok || len(arr) < len(out) {
+		return false
+	}
 	for &o, i in out {
 		n, is_number := arr[i].(json.Float)
-		if !is_number do return false
+		if !is_number {
+			return false
+		}
 		o = f32(n)
 	}
 	return true

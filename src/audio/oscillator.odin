@@ -1,4 +1,4 @@
-package omesound
+package omeaudio
 
 Oscillator :: struct {
 	phase:     f32,

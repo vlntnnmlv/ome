@@ -8,7 +8,34 @@ local function create_bricks(w, h)
 	return bricks
 end
 
-local model = { x = 100, y = 500, vx = 1, vy = 1, bricks = create_bricks(10, 5) }
+local function create_ball(x, y, w, h, vx, vy)
+	return {
+		x = x,
+		y = y,
+		w = w,
+		h = h,
+		vx = vx,
+		vy = vy
+	}
+end
+
+local function ball_update(ball, dt)
+	local w, h = ome.screen()
+
+	ball.x = ball.x + ball.vx * dt
+	ball.y = ball.y + ball.vy * dt
+	if ball.x >= w or ball.x <= 0 then
+		ball.vx = -1 * ball.vx
+	end
+	if ball.y >= h or ball.y <= 0 then
+		ball.vy = -1 * ball.vy
+	end
+end
+
+local model = {
+	ball = create_ball(500, 500, 10, 10, 100, 100),
+	bricks = create_bricks(10, 5),
+}
 
 return {
 	model = model,
@@ -17,15 +44,7 @@ return {
 	actions = {
 	},
 	update = function(m, dt)
-		w, h = ome.screen()
-		m.x = m.x + m.vx
-		m.y = m.y + m.vy
-		if m.x >= w or m.x <= 0 then
-			m.vx = -1 * m.vx
-		end
-		if m.y >= h or m.y <= 0 then
-			m.vy = -1 * m.vy
-		end
+		ball_update(m.ball, dt)
 	end,
 
 	draw = function(m)
@@ -46,6 +65,12 @@ return {
 			end
 		end
 
-		ome.rect(m.x - 5, m.y - 5, 10, 10, { 255, 80, 80 })
+		ome.rect(
+			m.ball.x - m.ball.w / 2,
+			m.ball.y - m.ball.h / 2,
+			m.ball.w,
+			m.ball.h,
+			{ 255, 80, 80 }
+		)
 	end,
 }

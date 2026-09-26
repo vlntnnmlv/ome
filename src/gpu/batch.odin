@@ -10,13 +10,59 @@ import "ome:platform"
 
 MAX_CAMERAS: u32 : 4
 
+PrimitiveType :: enum {
+	Point = 0,
+	Line,
+	Line_Strip,
+	Triangle,
+	Triangle_Strip,
+}
+
+@(private)
+primitive_type_to_metal :: proc(primitive_type: PrimitiveType) -> MTL.PrimitiveType {
+	switch primitive_type {
+	case .Point:
+		return .Point
+	case .Line:
+		return .Line
+	case .Line_Strip:
+		return .LineStrip
+	case .Triangle:
+		return .Triangle
+	case .Triangle_Strip:
+		return .TriangleStrip
+	}
+
+	return .Point
+}
+
+CullMode :: enum {
+	None = 0,
+	Front,
+	Back,
+}
+
+@(private)
+cull_mode_to_metal :: proc(cull_mode: CullMode) -> MTL.CullMode {
+	switch cull_mode {
+	case .None:
+		return .None
+	case .Front:
+		return .Front
+	case .Back:
+		return .Back
+	}
+
+	return .None
+}
+
 RenderState :: struct {
 	camera: u32,
-	cull:   MTL.CullMode,
+	cull:   CullMode,
 }
 
 RenderCall :: struct {
-	type:  MTL.PrimitiveType,
+	type:  PrimitiveType,
 	start: int,
 	count: int,
 	state: RenderState,
@@ -74,14 +120,14 @@ batch_flush :: proc(batch: ^Batch, device: ^Device) {
 			)
 		}
 		if render_call.state.cull != last_state.cull {
-			device.frame_context.encoder->setCullMode(render_call.state.cull)
+			device.frame_context.encoder->setCullMode(cull_mode_to_metal(render_call.state.cull))
 		}
 
 		last_state = render_call.state
 		device.frame_context.encoder->drawPrimitivesWithInstanceCount(
-			render_call.type,
-			cast(NS.UInteger)render_call.start,
-			cast(NS.UInteger)render_call.count,
+			primitive_type_to_metal(render_call.type),
+			NS.UInteger(render_call.start),
+			NS.UInteger(render_call.count),
 			1,
 		)
 	}
@@ -91,7 +137,7 @@ batch_create :: proc(device: ^Device, window_info: platform.WindowInfo) -> Batch
 	batch: Batch
 	batch.render_calls = make([dynamic]RenderCall)
 	batch.logical_size = {window_info.logical_width, window_info.logical_height}
-	batch.vertices = buffer_create(Vertex2D, device.handle)
+	batch.vertices = buffer_create(Vertex2D, device.native)
 
 	batch.cameras[0] = core.camera2d_create(batch.logical_size)
 	for i in 1 ..< MAX_CAMERAS {
@@ -131,19 +177,19 @@ batch_set_camera :: proc(batch: ^Batch, index: u32) {
 	batch.active_state.camera = index
 }
 
-batch_get_camera_2d :: proc(batch: ^Batch, index: u32) -> ^core.Camera2D {
+batch_get_camera2d :: proc(batch: ^Batch, index: u32) -> ^core.Camera2D {
 	return &batch.cameras[index].(core.Camera2D)
 }
 
-batch_get_camera_3d :: proc(batch: ^Batch, index: u32) -> ^core.Camera3D {
+batch_get_camera3d :: proc(batch: ^Batch, index: u32) -> ^core.Camera3D {
 	return &batch.cameras[index].(core.Camera3D)
 }
 
-batch_append_render_call :: proc(batch: ^Batch, type: MTL.PrimitiveType, start, count: int) {
-	mergable := type == .Point || type == .Line || type == .Triangle
+batch_append_render_call :: proc(batch: ^Batch, type: PrimitiveType, start, count: int) {
+	mergeable := type == .Point || type == .Line || type == .Triangle
 	n := len(batch.render_calls)
 	if n > 0 &&
-	   mergable &&
+	   mergeable &&
 	   batch.render_calls[n - 1].type == type &&
 	   batch.render_calls[n - 1].state == batch.active_state {
 		batch.render_calls[n - 1].count += count
@@ -174,8 +220,10 @@ batch_add_points :: proc(
 	vertices: []Vertex2D = vertices_positions_to_vertices(positions[:], color)
 	buffer_append(&batch.vertices, vertices[:])
 
-	type: MTL.PrimitiveType = .LineStrip
-	if fill || thickness > 1 do type = .Triangle
+	type: PrimitiveType = .Line_Strip
+	if fill || thickness > 1 {
+		type = .Triangle
+	}
 	batch_append_render_call(batch, type, start, len(vertices))
 }
 
@@ -194,7 +242,7 @@ batch_add_texture :: proc(
 	batch: ^Batch,
 	texture_handle: TextureHandle,
 	positions: []Position,
-	uvs: []Uv,
+	uvs: []UV,
 	color: core.Color,
 	slice_offset: Maybe(core.RectOffset) = nil,
 ) {
@@ -205,7 +253,7 @@ batch_add_texture :: proc(
 		uvs[:],
 		color,
 		Mode.Texture,
-		TexID(texture_handle.idx),
+		TextureID(texture_handle.idx),
 	)
 
 	buffer_append(&batch.vertices, vertices)
@@ -217,7 +265,7 @@ batch_add_mesh :: proc(
 	batch: ^Batch,
 	positions: []Position,
 	color: core.Color,
-	cull: MTL.CullMode = .Back,
+	cull: CullMode = .Back,
 ) {
 	start := len(batch.vertices.cpu)
 	vertices := vertices_positions_to_vertices(positions, color)

@@ -28,13 +28,36 @@ if [ ! -f "$LUA_LIB" ]; then
 	ar rcs "$LUA_LIB" build/obj/lua/*.o
 fi
 
-# --- build the engine ---
-mkdir -p build
-# -disallow-do
-odin build src/editor \
-	-vet -strict-style -vet-tabs -warnings-as-errors \
-	-collection:ome=src \
-	-extra-linker-flags:"-L$(pwd)/build/lib" \
-	-out:./build/editor
+# --- check ---
+check() {
+	odin check src/editor \
+		-vet -strict-style -vet-tabs -warnings-as-errors -disallow-do \
+		-collection:ome=src
+}
 
-./build/editor
+# --- build ---
+build() {
+	mkdir -p build
+	odin build src/editor \
+		-vet -strict-style -vet-tabs -vet-cast -warnings-as-errors -disallow-do \
+		-collection:ome=src \
+		-extra-linker-flags:"-L$(pwd)/build/lib" \
+		-out:./build/editor
+
+	./build/editor
+}
+if [ $# -eq 0 ]; then
+    build
+fi
+
+
+while getopts "c" opt; do
+    case "${opt}" in
+        c)
+        	check_result=$(check 2>/dev/null)
+	         if [ -z "$check_result" ]; then
+	             echo "Checked!"
+	         fi
+        ;;
+    esac
+done

@@ -135,10 +135,6 @@ iter :: proc(it: ^Iterator($T, $HT)) -> (val: ^T, h: HT, cond: bool) {
 	return nil, {}, false
 }
 
-skip :: proc(e: $T) -> bool {
-	return e.handle.idx == 0
-}
-
 delete :: proc(handle_map: ^Map($T, $HT)) {
 	virtual.arena_destroy(&handle_map.items_arena)
 	builtin.delete(handle_map.items)

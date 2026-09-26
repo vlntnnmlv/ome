@@ -31,6 +31,6 @@ clock_update :: proc(clock: ^Clock) {
 		clock.period_start = time.now()
 	}
 
-	clock.dt = cast(f32)time.duration_seconds(time.since(clock.frame_start))
+	clock.dt = f32(time.duration_seconds(time.since(clock.frame_start)))
 	clock.time += clock.dt
 }

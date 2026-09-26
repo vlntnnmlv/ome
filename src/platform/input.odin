@@ -20,7 +20,9 @@ input_update :: proc() {
 
 	numkeys: c.int
 	if state := SDL.GetKeyboardState(&numkeys); state != nil {
-		for i in 0 ..< min(int(numkeys), int(Key.Count)) do input.keys_now[i] = state[i]
+		for i in 0 ..< min(int(numkeys), int(Key.Count)) {
+			input.keys_now[i] = state[i]
+		}
 	}
 
 	x, y: f32
