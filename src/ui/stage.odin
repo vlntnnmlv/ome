@@ -16,7 +16,7 @@ stage_create :: proc(allocator: mem.Allocator = context.allocator) -> ^Stage {
 	stage := new(Stage)
 
 	scenes, err := handle_map.make(Scene, SceneHandle, allocator)
-	assert(err == nil)
+	ensure(err == nil)
 	stage.scenes = scenes
 	stage.active_scene_handles = make([dynamic]SceneHandle, allocator)
 
@@ -30,7 +30,8 @@ stage_add_scene :: proc(
 	allocator: mem.Allocator = context.allocator,
 ) -> SceneHandle {
 	handle, err := handle_map.add(&stage.scenes, scene_create(name, rect, allocator))
-	assert(err == nil)
+	ensure(err == nil)
+
 	return handle
 }
 
@@ -75,7 +76,7 @@ stage_active_scene_index :: proc(stage: ^Stage, handle: SceneHandle) -> int {
 }
 
 stage_show_scene :: proc(stage: ^Stage, handle: SceneHandle) {
-	ensure(stage_get_scene(stage, handle) != nil)
+	assert(stage_get_scene(stage, handle) != nil)
 
 	if i := stage_active_scene_index(stage, handle); i >= 0 {
 		ordered_remove(&stage.active_scene_handles, i)

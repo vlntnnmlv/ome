@@ -1,7 +1,5 @@
 package omeapp
 
-import "core:log"
-
 import "ome:assets"
 import "ome:core"
 import "ome:gpu"
@@ -16,6 +14,7 @@ Engine :: struct {
 	quit:           bool,
 	frame_open:     bool,
 	clock:          core.Clock,
+	frame_skipped:  bool,
 }
 
 EventHandler :: struct {
@@ -38,18 +37,18 @@ engine_create :: proc(
 		return nil, false
 	}
 
-	engine := new(Engine)
-	engine.window = window
-
 	device, device_ok := gpu.device_create(
-		platform.window_native_handle(engine.window),
-		engine.window.info,
+		platform.window_native_handle(window),
+		window.info,
 		core.color_to_linear64(clear_color),
 	)
 	if !device_ok {
-		log.error("app: couldn't create GPU device")
+		platform.window_destroy(window)
 		return nil, false
 	}
+
+	engine := new(Engine)
+	engine.window = window
 
 	library := assets.library_create(device)
 	engine.renderer = render.renderer_create(device, library, engine.window.info)
@@ -131,8 +130,10 @@ engine_process_events :: proc(engine: ^Engine) {
 
 @(private)
 engine_end_frame :: proc(engine: ^Engine) {
-	render.renderer_flush(engine.renderer)
-	render.renderer_present(engine.renderer)
+	if !engine.frame_skipped {
+		render.renderer_flush(engine.renderer)
+		render.renderer_present(engine.renderer)
+	}
 	core.clock_update(&engine.clock)
 
 	free_all(context.temp_allocator)
@@ -152,7 +153,7 @@ engine_next_frame :: proc(engine: ^Engine) -> bool {
 		return false
 	}
 
-	render.renderer_begin(engine.renderer)
+	engine.frame_skipped = !render.renderer_begin(engine.renderer)
 	engine.frame_open = true
 	return engine.frame_open
 }

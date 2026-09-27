@@ -23,10 +23,10 @@ renderer_create :: proc(
 	return renderer
 }
 
-renderer_begin :: proc(renderer: ^Renderer) {
+renderer_begin :: proc(renderer: ^Renderer) -> bool {
 	assets.library_flush(renderer.library)
-	gpu.device_begin(renderer.device)
 	gpu.batch_clear(&renderer.batch)
+	return gpu.device_begin(renderer.device)
 }
 
 renderer_flush :: proc(renderer: ^Renderer) {

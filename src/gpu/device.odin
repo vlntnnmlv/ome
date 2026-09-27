@@ -37,69 +37,62 @@ device_create :: proc(
 	^Device,
 	bool,
 ) {
-	mtl_device := MTL.CreateSystemDefaultDevice()
+	ns_window := (^NS.Window)(native_window)
+	if ns_window == nil {
+		log.errorf("gpu/device: couldn't get native window")
+		return nil, false
+	}
 
+	mtl_device := MTL.CreateSystemDefaultDevice()
 	if mtl_device == nil {
 		log.errorf("gpu/device: couldn't create default metal device")
 		return nil, false
 	}
 
-	argument_buffer_support := mtl_device->argumentBuffersSupport()
-	if argument_buffer_support != .Tier2 {
+	ok := false
+	defer if !ok {
+		mtl_device->release()
+	}
+
+	if mtl_device->argumentBuffersSupport() != .Tier2 {
+		mtl_device->release()
 		log.errorf("gpu/device: argument buffers aren't supported")
 		return nil, false
 	}
 
-	native_window := (^NS.Window)(native_window)
-	if native_window == nil {
-		log.errorf("gpu/device: couldn't get native window")
+	shader_source, shader_ok := shader_compile_slang("assets/shaders/shader.slang")
+	if !shader_ok {
 		return nil, false
 	}
 
-	swapchain := CA.MetalLayer.layer()
-	swapchain->setDrawableSize(
-		NS.Size{NS.Float(window_info.pixel_width), NS.Float(window_info.pixel_height)},
-	)
-	swapchain->setDevice(mtl_device)
-	swapchain->setPixelFormat(.BGRA8Unorm_sRGB)
-	swapchain->setFramebufferOnly(true)
-	swapchain->setFrame(native_window->frame())
-
-	native_window->contentView()->setLayer(swapchain)
-	native_window->setOpaque(true)
-	native_window->setBackgroundColor(nil)
-
-	command_queue := mtl_device->newCommandQueue()
+	source := NS.String.alloc()->initWithOdinString(string(shader_source))
+	defer source->release()
 	compile_options := NS.new(MTL.CompileOptions)
+	defer compile_options->release()
 
-	shader_source, ok := shader_compile_slang("assets/shaders/shader.slang")
-	if !ok {
-		return nil, false
-	}
-	program_library, lib_error := mtl_device->newLibraryWithSource(
-		NS.String.alloc()->initWithOdinString(string(shader_source)),
-		compile_options,
-	)
+	program_library, lib_error := mtl_device->newLibraryWithSource(source, compile_options)
 	if lib_error != nil {
 		log.errorf(
-			"gpu/device: shader compilation failed with error: %v",
+			"gpu/device: shader compilation failed with error %v",
 			lib_error->localizedDescription(),
 		)
 		return nil, false
 	}
+	defer program_library->release()
 
 	vertex_program := program_library->newFunctionWithName(NS.AT("vertex_main"))
-	fragment_program := program_library->newFunctionWithName(NS.AT("fragment_main"))
-
 	if vertex_program == nil {
 		log.errorf("gpu/device: shader vertex function extraction failed")
 		return nil, false
 	}
+	defer vertex_program->release()
 
+	fragment_program := program_library->newFunctionWithName(NS.AT("fragment_main"))
 	if fragment_program == nil {
 		log.errorf("gpu/device: shader fragment function extraction failed")
 		return nil, false
 	}
+	defer fragment_program->release()
 
 	pipeline_state_descriptor := NS.new(MTL.RenderPipelineDescriptor)
 	pipeline_state_descriptor->colorAttachments()->object(0)->setPixelFormat(.BGRA8Unorm_sRGB)
@@ -124,15 +117,25 @@ device_create :: proc(
 		return nil, false
 	}
 
-	device := new(Device)
+	swapchain := CA.MetalLayer.layer()
+	swapchain->setDrawableSize(
+		NS.Size{NS.Float(window_info.pixel_width), NS.Float(window_info.pixel_height)},
+	)
+	swapchain->setDevice(mtl_device)
+	swapchain->setPixelFormat(.BGRA8Unorm_sRGB)
+	swapchain->setFramebufferOnly(true)
+	swapchain->setFrame(ns_window->frame())
 
+	ns_window->contentView()->setLayer(swapchain)
+	ns_window->setOpaque(true)
+	ns_window->setBackgroundColor(nil)
+
+	device := new(Device)
 	device.native = mtl_device
 	device.swapchain = swapchain
-	device.command_queue = command_queue
+	device.command_queue = mtl_device->newCommandQueue()
 	device.pipeline_state = pipeline_state
-
 	device.clear_color = MTL.ClearColor{clear_color.r, clear_color.g, clear_color.b, clear_color.a}
-
 	device.bind_table = bind_table_create(device.native, fragment_program)
 
 	sync.sema_post(&device.frame_sema, GPU_BUFFERS_RING_SIZE)
@@ -141,29 +144,38 @@ device_create :: proc(
 		device_on_frame_complete,
 	)
 
+	ok = true
 	return device, true
 }
 
-device_begin :: proc(renderer: ^Device) {
-	device_wait_on_frame_complete(renderer)
+device_begin :: proc(device: ^Device) -> bool {
+	sync.sema_wait(&device.frame_sema)
 
-	renderer.frame_context.pool = NS.AutoreleasePool.alloc()->init()
+	device.frame_context.pool = NS.AutoreleasePool.alloc()->init()
 
-	renderer.frame_context.drawable = renderer.swapchain->nextDrawable()
-	assert(renderer.frame_context.drawable != nil)
+	device.frame_context.drawable = device.swapchain->nextDrawable()
+	if device.frame_context.drawable == nil {
+		device.frame_context.pool->drain()
+		device.frame_context.pool = nil
+		sync.sema_post(&device.frame_sema)
+		return false
+	}
+
+	device.frame_slot_index = (device.frame_slot_index + 1) % GPU_BUFFERS_RING_SIZE
 
 	pass := MTL.RenderPassDescriptor.renderPassDescriptor()
 	color_attachment := pass->colorAttachments()->object(0)
 	assert(color_attachment != nil)
-	color_attachment->setClearColor(renderer.clear_color)
+	color_attachment->setClearColor(device.clear_color)
 	color_attachment->setLoadAction(.Clear)
 	color_attachment->setStoreAction(.Store)
-	color_attachment->setTexture(renderer.frame_context.drawable->texture())
+	color_attachment->setTexture(device.frame_context.drawable->texture())
 
-	renderer.frame_context.command_buffer = renderer.command_queue->commandBuffer()
-	renderer.frame_context.encoder = renderer.frame_context.command_buffer->renderCommandEncoderWithDescriptor(
+	device.frame_context.command_buffer = device.command_queue->commandBuffer()
+	device.frame_context.encoder = device.frame_context.command_buffer->renderCommandEncoderWithDescriptor(
 		pass,
 	)
+	return true
 }
 
 device_present :: proc(device: ^Device) {
@@ -186,6 +198,18 @@ device_resize :: proc(device: ^Device, window_info: platform.WindowInfo) {
 	)
 }
 
+device_wait_idle :: proc(device: ^Device) {
+	for _ in 0 ..< GPU_BUFFERS_RING_SIZE {
+		sync.sema_wait(&device.frame_sema)
+	}
+	sync.sema_post(&device.frame_sema, GPU_BUFFERS_RING_SIZE)
+}
+
+@(private = "file")
+device_on_frame_complete :: proc "c" (user_data: rawptr) {
+	sync.sema_post((^sync.Sema)(user_data))
+}
+
 device_destroy :: proc(device: ^Device) {
 	bind_table_destroy(device.bind_table)
 	free(device.frame_complete_block)
@@ -195,22 +219,4 @@ device_destroy :: proc(device: ^Device) {
 	device.native->release()
 
 	free(device)
-}
-
-device_wait_idle :: proc(device: ^Device) {
-	for _ in 0 ..< GPU_BUFFERS_RING_SIZE {
-		sync.sema_wait(&device.frame_sema)
-	}
-	sync.sema_post(&device.frame_sema, GPU_BUFFERS_RING_SIZE)
-}
-
-@(private)
-device_wait_on_frame_complete :: proc(renderer: ^Device) {
-	sync.sema_wait(&renderer.frame_sema)
-	renderer.frame_slot_index = (renderer.frame_slot_index + 1) % GPU_BUFFERS_RING_SIZE
-}
-
-@(private = "file")
-device_on_frame_complete :: proc "c" (user_data: rawptr) {
-	sync.sema_post((^sync.Sema)(user_data))
 }

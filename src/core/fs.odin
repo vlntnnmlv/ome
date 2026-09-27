@@ -1,16 +1,22 @@
 package omecore
 
-import "core:fmt"
+import "core:log"
 import "core:os"
 import "core:strings"
 
-directory_list_files :: proc(path: string) -> []string {
+directory_list_files :: proc(path: string) -> ([]string, bool) {
 	dir, open_err := os.open(path)
-	assert(open_err == os.ERROR_NONE, fmt.tprintln("Couldn't open directory: ", path))
+	if open_err != os.ERROR_NONE {
+		log.errorf("core/fs: failed to open directory '%s' with error %v", path, open_err)
+		return nil, false
+	}
 	defer os.close(dir)
 
 	file_infos, read_err := os.read_dir(dir, 0, context.allocator)
-	assert(read_err == os.ERROR_NONE, fmt.tprintln("Couldn't read directory: ", path))
+	if read_err != os.ERROR_NONE {
+		log.errorf("core/fs: failed to read directory '%s' with error %v", path, read_err)
+		return nil, false
+	}
 
 	defer os.file_info_slice_delete(file_infos, context.allocator)
 
@@ -23,5 +29,5 @@ directory_list_files :: proc(path: string) -> []string {
 		append(&names, strings.clone(file_info.fullpath))
 	}
 
-	return names[:]
+	return names[:], true
 }

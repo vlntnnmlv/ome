@@ -86,12 +86,18 @@ main :: proc() {
 		"iosevka",
 		{32, 64},
 	)
-	assert(ferr == .None)
+	if ferr != .None {
+		return
+	}
 
 	_, aerr := assets.library_load_atlas(library, "assets/textures/ui", "ui_atlas")
-	assert(aerr == .None)
+	if aerr != .None {
+		return
+	}
 	_, aerr = assets.library_load_atlas(library, "assets/textures/player", "player_atlas")
-	assert(aerr == .None)
+	if aerr != .None {
+		return
+	}
 	// ---------
 
 	// --- UI ---
@@ -166,7 +172,7 @@ main :: proc() {
 			engine.renderer,
 			fmt.tprint(engine.clock.fps),
 			font_handle,
-			77,
+			64,
 			{0, screen_rect.h, 500, 500},
 			core.Color{0, 0, 255, 255},
 		)

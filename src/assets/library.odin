@@ -6,6 +6,16 @@ import "core:strings"
 import "ome:gpu"
 import "ome:handle_map"
 
+
+Error :: enum {
+	None = 0,
+	File,
+	Init,
+	Pack,
+	GPU,
+	Duplicate_Name,
+}
+
 Library :: struct {
 	device:        ^gpu.Device,
 	fonts:         handle_map.Map(Font, FontHandle),
@@ -19,10 +29,10 @@ library_create :: proc(device: ^gpu.Device) -> ^Library {
 	library: ^Library = new(Library)
 
 	font_map, fm_err := handle_map.make(Font, FontHandle)
-	assert(fm_err == nil)
+	ensure(fm_err == nil)
 
 	atlas_map, am_err := handle_map.make(Atlas, AtlasHandle)
-	assert(am_err == nil)
+	ensure(am_err == nil)
 
 	library.device = device
 	library.fonts = font_map
@@ -42,21 +52,26 @@ library_load_font :: proc(
 	sizes: []u32 = {},
 ) -> (
 	FontHandle,
-	FontError,
+	Error,
 ) {
 	font_handle, err := handle_map.add(&library.fonts, Font{})
-	assert(err == nil)
+	ensure(err == nil)
 
 	font := handle_map.get(library.fonts, font_handle)
 	ferr := font_load(font, path, sizes)
-	if ferr == .None {
-		if name not_in library.font_names {
-			library.font_names[strings.clone(name)] = font_handle
-		} else {
-			log.warnf("assets: font with name '%s' already exists", name)
-		}
+	if ferr != .None {
+		font_destroy(font)
+		handle_map.remove(&library.fonts, font_handle)
+		return {}, ferr
 	}
-	return font_handle, ferr
+
+	if name not_in library.font_names {
+		library.font_names[strings.clone(name)] = font_handle
+	} else {
+		log.warnf("assets: font with name '%s' already exists", name)
+	}
+
+	return font_handle, .None
 }
 
 library_get_font :: proc(library: ^Library, handle: FontHandle) -> ^Font {
@@ -74,22 +89,27 @@ library_load_atlas :: proc(
 	name: string,
 ) -> (
 	AtlasHandle,
-	AtlasError,
+	Error,
 ) {
 	atlas_handle, err := handle_map.add(&library.atlases, Atlas{})
-	assert(err == nil)
+	ensure(err == nil)
 
 	atlas := handle_map.get(library.atlases, atlas_handle)
 
 	aerr := atlas_load(atlas, library.device.bind_table, directory_path, name)
-	if aerr == .None {
-		if name not_in library.atlas_names {
-			library.atlas_names[strings.clone(name)] = atlas_handle
-		} else {
-			log.warnf("assets: atlas with name '%s' already exists", name)
-		}
+	if aerr != .None {
+		atlas_destroy(atlas)
+		handle_map.remove(&library.atlases, atlas_handle)
+		return {}, aerr
 	}
-	return atlas_handle, aerr
+
+	if name not_in library.atlas_names {
+		library.atlas_names[strings.clone(name)] = atlas_handle
+	} else {
+		log.warnf("assets: atlas with name '%s' already exists", name)
+	}
+
+	return atlas_handle, .None
 }
 
 library_get_atlas :: proc(library: ^Library, handle: AtlasHandle) -> ^Atlas {
@@ -101,15 +121,25 @@ library_find_atlas :: proc(library: ^Library, name: string) -> (AtlasHandle, boo
 	return handle, found
 }
 
-library_load_texture :: proc(library: ^Library, path: string, name: string) -> gpu.TextureHandle {
+library_load_texture :: proc(
+	library: ^Library,
+	path: string,
+	name: string,
+) -> (
+	gpu.TextureHandle,
+	Error,
+) {
 	if name in library.texture_names {
-		// TODO: return an err also
-		return gpu.TextureHandle{}
+		log.warnf("assets: texture with name '%s' already exists", name)
+		return gpu.TextureHandle{}, .Duplicate_Name
 	}
-	texture_handle := gpu.texture_create(library.device.bind_table, path, name)
+	texture_handle, err := gpu.texture_create(library.device.bind_table, path, name)
+	if err != .None {
+		return {}, .GPU
+	}
 
 	library.texture_names[strings.clone(name)] = texture_handle
-	return texture_handle
+	return texture_handle, .None
 }
 
 library_find_texture :: proc(library: ^Library, name: string) -> (gpu.TextureHandle, bool) {

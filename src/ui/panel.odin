@@ -129,7 +129,7 @@ panel_from_description :: proc(
 	}
 
 	panel_handle, err := handle_map.add(&scene.panels, panel)
-	assert(err == nil)
+	ensure(err == nil)
 
 	if parent_handle != NO_PANEL {
 		parent := scene_get_panel(scene, parent_handle)

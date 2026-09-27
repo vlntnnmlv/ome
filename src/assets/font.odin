@@ -1,5 +1,6 @@
 package omeassets
 
+import "core:log"
 import "core:os"
 import "core:slice"
 
@@ -16,13 +17,6 @@ REFERENCE_FONT_SIZE :: 32
 FIRST_CHAR :: 32
 CHAR_COUNT :: 95
 
-FontError :: enum {
-	None = 0,
-	File_Error,
-	Init_Error,
-	Packing_Error,
-}
-
 FontHandle :: distinct handle_map.Handle
 
 Font :: struct {
@@ -35,6 +29,7 @@ Font :: struct {
 	bitmap:         []u8,
 	sizes:          [dynamic]u32,
 	pending:        [dynamic]u32,
+	unpackable:     [dynamic]u32,
 	char_data:      map[u32][]STBTT.packedchar,
 	texture_handle: gpu.TextureHandle,
 	dirty:          bool,
@@ -45,6 +40,9 @@ font_ensure_size :: proc(font: ^Font, size: u32) {
 		return
 	}
 	if slice.contains(font.pending[:], size) {
+		return
+	}
+	if slice.contains(font.unpackable[:], size) {
 		return
 	}
 	append(&font.pending, size)
@@ -61,25 +59,28 @@ font_nearest_size :: proc(font: ^Font, size: u32) -> u32 {
 }
 
 @(private)
-font_load :: proc(font: ^Font, path: string, sizes: []u32 = {}) -> FontError {
+font_load :: proc(font: ^Font, path: string, sizes: []u32 = {}) -> Error {
 	font.path = path
 	font.bitmap_size = INITIAL_BITMAP_SIZE
 
 	data, err := os.read_entire_file_from_path(font.path, context.allocator)
 	if err != nil {
-		return .File_Error
+		log.errorf("assets/font: failed to load font at '%s'", path)
+		return .File
 	}
 
 	font.data = data
 
 	if !STBTT.InitFont(&font.info, raw_data(font.data), 0) {
-		return .Init_Error
+		log.errorf("assets/font: failed to init font at '%s'", path)
+		return .Init
 	}
 
 	font.bitmap = make([]u8, font.bitmap_size * font.bitmap_size)
 	font.char_data = make(map[u32][]STBTT.packedchar)
 	font.sizes = make([dynamic]u32)
 	font.pending = make([dynamic]u32)
+	font.unpackable = make([dynamic]u32)
 
 	if STBTT.PackBegin(
 		   &font.pack_context,
@@ -91,7 +92,8 @@ font_load :: proc(font: ^Font, path: string, sizes: []u32 = {}) -> FontError {
 		   nil,
 	   ) ==
 	   0 {
-		return .Packing_Error
+		log.errorf("assets/font: failed to pack font at '%s'", path)
+		return .Pack
 	}
 
 	STBTT.PackSetOversampling(&font.pack_context, 2, 2)
@@ -110,7 +112,7 @@ font_load :: proc(font: ^Font, path: string, sizes: []u32 = {}) -> FontError {
 }
 
 @(private)
-font_pack_size :: proc(font: ^Font, size: u32) -> FontError {
+font_pack_size :: proc(font: ^Font, size: u32) -> Error {
 	chars := make([]STBTT.packedchar, CHAR_COUNT)
 
 	range := STBTT.pack_range {
@@ -134,7 +136,7 @@ font_pack_size :: proc(font: ^Font, size: u32) -> FontError {
 	for r in rects[:n] {
 		if !r.was_packed {
 			delete(chars)
-			return .Packing_Error
+			return .Pack
 		}
 	}
 
@@ -151,9 +153,15 @@ font_pack_size :: proc(font: ^Font, size: u32) -> FontError {
 @(private)
 font_flush :: proc(font: ^Font, bind_table: ^gpu.BindTable) {
 	for size in font.pending {
-		font_pack_size(font, size)
+		if err := font_pack_size(font, size); err != .None {
+			log.warnf(
+				"assets/font: bitmap full, size %d not packed for '%s', using nearest size",
+				size,
+				font.path,
+			)
+			append(&font.unpackable, size)
+		}
 	}
-
 	clear(&font.pending)
 
 	if !font.dirty {
@@ -161,7 +169,7 @@ font_flush :: proc(font: ^Font, bind_table: ^gpu.BindTable) {
 	}
 
 	if !handle_map.valid(bind_table.textures, font.texture_handle) {
-		font.texture_handle = gpu.texture_create_from_data(
+		texture_handle, err := gpu.texture_create_from_data(
 			bind_table,
 			gpu.TextureData {
 				name = "font",
@@ -174,6 +182,10 @@ font_flush :: proc(font: ^Font, bind_table: ^gpu.BindTable) {
 			},
 			.R8_Unorm,
 		)
+		if err != .None {
+			return
+		}
+		font.texture_handle = texture_handle
 	} else {
 		gpu.texture_write(bind_table, font.texture_handle, raw_data(font.bitmap), .R8_Unorm)
 	}
@@ -193,4 +205,5 @@ font_destroy :: proc(font: ^Font) {
 	delete(font.sizes)
 	delete(font.data)
 	delete(font.pending)
+	delete(font.unpackable)
 }

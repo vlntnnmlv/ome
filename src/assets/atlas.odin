@@ -12,11 +12,6 @@ import "ome:core"
 import "ome:gpu"
 import "ome:handle_map"
 
-AtlasError :: enum {
-	None = 0,
-	Pack_Error,
-}
-
 AtlasHandle :: distinct handle_map.Handle
 
 Atlas :: struct {
@@ -44,8 +39,11 @@ atlas_load_from_directory :: proc(
 	bind_table: ^gpu.BindTable,
 	directory_path: string,
 	atlas_name: string,
-) -> AtlasError {
-	names: []string = core.directory_list_files(directory_path)
+) -> Error {
+	names, ok := core.directory_list_files(directory_path)
+	if !ok {
+		return .File
+	}
 
 	defer {
 		for name in names {
@@ -64,7 +62,7 @@ atlas_load_from_files :: proc(
 	bind_table: ^gpu.BindTable,
 	paths: []string,
 	name: string,
-) -> AtlasError {
+) -> Error {
 	width, height, channels: i32
 	textures_data: [dynamic]gpu.TextureData
 	rects: [dynamic]STBRP.Rect
@@ -74,6 +72,14 @@ atlas_load_from_files :: proc(
 		cpath := strings.clone_to_cstring(paths[i])
 		defer delete(cpath)
 		pixels := STBI.load(cpath, &width, &height, &channels, 4)
+		if pixels == nil {
+			log.errorf(
+				"assets/atlas: failed to load texture at path '%s' with error %s",
+				cpath,
+				STBI.failure_reason(),
+			)
+			continue
+		}
 		rect: STBRP.Rect = {
 			id = i32(i),
 			w  = STBRP.Coord(width),
@@ -111,8 +117,12 @@ atlas_load_from_files :: proc(
 	pack_result := STBRP.pack_rects(&ctx, raw_data(rects), i32(len(rects)))
 
 	if pack_result == 0 {
+		for texture_data in textures_data {
+			delete(texture_data.name)
+		}
 		delete(sprites)
-		return .Pack_Error
+		log.infof("assets/atlas: failed to pack atlas '%s'", name)
+		return .Pack
 	} else {
 		log.infof("assets/atlas: atlas '%s' packed successfully", name)
 	}
@@ -145,16 +155,15 @@ atlas_load_from_files :: proc(
 		name     = name,
 	}
 
-	texture_handle: gpu.TextureHandle = atlas_build_texture(
-		bind_table,
-		textures_data[:],
-		atlas_data,
-	)
+	texture_handle, gpu_err := atlas_build_texture(bind_table, textures_data[:], atlas_data)
 	atlas.texture_handle = texture_handle
 	atlas.sprites = sprites
 	atlas.size = f32(atlas_size)
 	atlas.name = strings.clone(atlas_data.name)
 
+	if gpu_err != .None {
+		return .GPU
+	}
 	return .None
 }
 
@@ -163,7 +172,10 @@ atlas_build_texture :: proc(
 	bind_table: ^gpu.BindTable,
 	textures_data: []gpu.TextureData,
 	atlas_data: gpu.TextureData,
-) -> gpu.TextureHandle {
+) -> (
+	gpu.TextureHandle,
+	gpu.Error,
+) {
 	for texture_data in textures_data {
 		if !texture_data.in_atlas {
 			continue
@@ -180,9 +192,7 @@ atlas_build_texture :: proc(
 		}
 	}
 
-	handle := gpu.texture_create_from_data(bind_table, atlas_data)
-
-	return handle
+	return gpu.texture_create_from_data(bind_table, atlas_data)
 }
 
 @(private)

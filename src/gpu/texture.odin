@@ -1,5 +1,6 @@
 package omegpu
 
+import "core:log"
 import "core:strings"
 
 import NS "core:sys/darwin/Foundation"
@@ -33,13 +34,24 @@ texture_create :: proc(
 	path: string,
 	name: string,
 	format: PixelFormat = .RGBA8_Unorm_sRGB,
-) -> TextureHandle {
+) -> (
+	TextureHandle,
+	Error,
+) {
 	w, h, channels: i32
 
 	cpath := strings.clone_to_cstring(path)
+	defer delete(cpath)
 	pixels := STBI.load(cpath, &w, &h, &channels, pixel_format_to_channels(format))
 	defer STBI.image_free(pixels)
-	defer delete(cpath)
+	if pixels == nil {
+		log.errorf(
+			"gpu/texture: failed to load texture at path '%s' with error %s",
+			path,
+			STBI.failure_reason(),
+		)
+		return {}, .Load
+	}
 
 	texture_data := TextureData {
 		pixels   = pixels,
@@ -85,7 +97,18 @@ texture_create_from_data :: proc(
 	bind_table: ^BindTable,
 	texture_data: TextureData,
 	format: PixelFormat = .RGBA8_Unorm_sRGB,
-) -> TextureHandle {
+) -> (
+	TextureHandle,
+	Error,
+) {
+	if handle_map.len(bind_table.textures) >= MAX_TEXTURES - 1 {
+		log.errorf(
+			"gpu/texture: texture limit (%d) reached, can't create '%s'",
+			MAX_TEXTURES - 1,
+			texture_data.name,
+		)
+		return {}, .Texture_Limit
+	}
 	desc := MTL.TextureDescriptor.texture2DDescriptorWithPixelFormat(
 		pixel_format_to_metal(format),
 		NS.UInteger(texture_data.width),
@@ -108,11 +131,11 @@ texture_create_from_data :: proc(
 	)
 
 	handle, err := handle_map.add(&bind_table.textures, Texture{native = texture})
-	assert(err == nil)
+	ensure(err == nil)
 
 	bind_table_rebuild(bind_table)
 
-	return handle
+	return handle, .None
 }
 
 texture_write :: proc(

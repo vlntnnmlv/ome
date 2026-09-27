@@ -39,7 +39,7 @@ scene_create :: proc(
 	allocator: mem.Allocator = context.allocator,
 ) -> Scene {
 	panels, err := handle_map.make(Panel, PanelHandle, allocator)
-	assert(err == nil)
+	ensure(err == nil)
 
 	scene: Scene = {
 		allocator        = allocator,
@@ -52,8 +52,9 @@ scene_create :: proc(
 	root_panel := panel_create(NO_PANEL, "root", rect, PanelSpec{}, allocator)
 	root_panel.ignore_events = true
 
-	root_handle, err_2 := handle_map.add(&scene.panels, root_panel)
-	assert(err_2 == nil)
+	root_handle: PanelHandle
+	root_handle, err = handle_map.add(&scene.panels, root_panel)
+	ensure(err == nil)
 
 	scene.root_handle = root_handle
 	scene.name = strings.clone(name, allocator)
@@ -74,7 +75,7 @@ scene_add_panel :: proc(
 
 	panel := panel_create(parent_handle, name, rect, spec, scene.allocator)
 	panel_handle, err := handle_map.add(&scene.panels, panel)
-	assert(err == nil)
+	ensure(err == nil)
 
 
 	parent := handle_map.get(scene.panels, parent_handle)

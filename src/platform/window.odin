@@ -27,6 +27,7 @@ window_create :: proc(title: cstring, logical_width, logical_height: i32) -> (^W
 			"platform/window: sdl video subsystem failed to initialize woth error %v",
 			SDL.GetError(),
 		)
+		SDL.QuitSubSystem({.VIDEO})
 		return nil, false
 	}
 

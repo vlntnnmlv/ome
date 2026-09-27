@@ -33,8 +33,8 @@ local function ball_update(ball, dt)
 end
 
 local model = {
-	ball = create_ball(500, 500, 10, 10, 100, 100),
-	bricks = create_bricks(10, 5),
+	ball = create_ball(500, 500, 10, 10, 500, 500),
+	bricks = create_bricks(16, 8),
 }
 
 return {

@@ -2,7 +2,6 @@ package omescript
 
 import "base:runtime"
 import "core:c"
-import "core:fmt"
 import "core:log"
 import "core:mem"
 import "core:strings"
@@ -20,83 +19,6 @@ Error :: enum {
 
 Ref :: distinct i32
 NO_REF :: Ref(LUA.NOREF)
-
-vm_call :: proc(
-	vm: ^VM,
-	module_ref: Ref,
-	table_key: cstring,
-	name: cstring,
-	args: ..f64,
-) -> (
-	Error,
-	string,
-) {
-	L := vm.state
-	top := LUA.gettop(L)
-	defer LUA.settop(L, top)
-
-	LUA.rawgeti(L, LUA.REGISTRYINDEX, LUA.Integer(module_ref))
-	module_idx := LUA.gettop(L)
-
-	container := module_idx
-	if table_key != nil {
-		LUA.getfield(L, module_idx, table_key)
-		if !LUA.istable(L, -1) {
-			return .Missing, fmt.tprintf("module has no '%s' table", table_key)
-		}
-		container = LUA.gettop(L)
-	}
-
-	LUA.pushcfunction(L, traceback)
-	handler := LUA.gettop(L)
-
-	LUA.getfield(L, container, name)
-	if !LUA.isfunction(L, -1) {
-		return .Missing, fmt.tprintf("no function '%s'", name)
-	}
-
-	LUA.getfield(L, module_idx, "model")
-	for a in args {
-		LUA.pushnumber(L, LUA.Number(a))
-	}
-
-	if rc := LUA.pcall(L, c.int(1 + len(args)), 0, handler); rc != 0 {
-		return status_to_error(LUA.Status(rc)), vm_pop_message(vm, context.temp_allocator)
-	}
-	return .None, ""
-}
-
-@(private)
-traceback :: proc "c" (L: ^LUA.State) -> c.int {
-	LUA.L_traceback(L, L, LUA.tostring(L, 1), 1)
-	return 1
-}
-
-@(private)
-vm_ref_top :: proc(vm: ^VM) -> Ref {
-	return Ref(LUA.L_ref(vm.state, LUA.REGISTRYINDEX))
-}
-
-vm_unref :: proc(vm: ^VM, ref: Ref) {
-	if ref == NO_REF {
-		return
-	}
-
-	LUA.L_unref(vm.state, LUA.REGISTRYINDEX, c.int(ref))
-}
-
-vm_load_module :: proc(vm: ^VM, path: string) -> (Ref, bool) {
-	if err, msg := vm_run_file(vm, path); err != nil {
-		log.errorf("script: %s: %v: %s", path, err, msg)
-		return NO_REF, false
-	}
-	if !LUA.istable(vm.state, -1) {
-		log.errorf("script: %s must return a table", path)
-		vm_clear_stack(vm)
-		return NO_REF, false
-	}
-	return vm_ref_top(vm), true
-}
 
 VM :: struct {
 	state: ^LUA.State,
@@ -117,6 +39,25 @@ vm_create :: proc(allocator: mem.Allocator = context.allocator) -> (^VM, bool) {
 
 	LUA.L_openlibs(vm.state)
 	return vm, true
+}
+
+@(private)
+traceback :: proc "c" (L: ^LUA.State) -> c.int {
+	LUA.L_traceback(L, L, LUA.tostring(L, 1), 1)
+	return 1
+}
+
+@(private)
+vm_ref_top :: proc(vm: ^VM) -> Ref {
+	return Ref(LUA.L_ref(vm.state, LUA.REGISTRYINDEX))
+}
+
+vm_unref :: proc(vm: ^VM, ref: Ref) {
+	if ref == NO_REF {
+		return
+	}
+
+	LUA.L_unref(vm.state, LUA.REGISTRYINDEX, c.int(ref))
 }
 
 @(private)
@@ -157,6 +98,7 @@ vm_pop :: proc(vm: ^VM, n: int = 1) {
 	LUA.pop(vm.state, c.int(n))
 }
 
+// Returns the message; does not log
 vm_get_string :: proc(
 	vm: ^VM,
 	module_ref: Ref,
@@ -179,6 +121,7 @@ vm_get_string :: proc(
 	return strings.clone(string(s), allocator), .None, ""
 }
 
+// Returns the message; does not log
 vm_get_numbers :: proc(vm: ^VM, module_ref: Ref, path: string, out: []f32) -> (Error, string) {
 	L := vm.state
 	top := LUA.gettop(L)
@@ -277,25 +220,6 @@ resolve :: proc "c" (L: ^LUA.State) -> c.int {
 	LUA.pushvalue(L, 2)
 	LUA.gettable(L, -2)
 	return 1
-}
-
-@(private)
-vm_push_bound :: proc(vm: ^VM, module_ref: Ref, path: string) -> (Error, string) {
-	L := vm.state
-	LUA.pushcfunction(L, traceback)
-	handler := LUA.gettop(L)
-
-	LUA.pushcfunction(L, resolve)
-	LUA.rawgeti(L, LUA.REGISTRYINDEX, LUA.Integer(module_ref))
-	LUA.pushstring(L, strings.clone_to_cstring(path, context.temp_allocator))
-
-	if rc := LUA.pcall(L, 2, 1, handler); rc != 0 {
-		return status_to_error(LUA.Status(rc)), vm_pop_message(vm, context.temp_allocator)
-	}
-	if LUA.isnil(L, -1) {
-		return .Missing, ""
-	}
-	return .None, ""
 }
 
 vm_destroy :: proc(vm: ^VM) {

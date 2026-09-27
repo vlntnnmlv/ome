@@ -17,7 +17,7 @@ BindTable :: struct {
 bind_table_create :: proc(device: ^MTL.Device, fragment_fn: ^MTL.Function) -> ^BindTable {
 	bind_table := new(BindTable)
 	texture_map, err := handle_map.make(Texture, TextureHandle)
-	assert(err == nil)
+	ensure(err == nil)
 
 	bind_table.textures = texture_map
 	bind_table.resources = make([dynamic]^MTL.Resource)
