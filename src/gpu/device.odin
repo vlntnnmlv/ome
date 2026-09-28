@@ -55,7 +55,6 @@ device_create :: proc(
 	}
 
 	if mtl_device->argumentBuffersSupport() != .Tier2 {
-		mtl_device->release()
 		log.errorf("gpu/device: argument buffers aren't supported")
 		return nil, false
 	}
@@ -95,6 +94,8 @@ device_create :: proc(
 	defer fragment_program->release()
 
 	pipeline_state_descriptor := NS.new(MTL.RenderPipelineDescriptor)
+	defer pipeline_state_descriptor->release()
+
 	pipeline_state_descriptor->colorAttachments()->object(0)->setPixelFormat(.BGRA8Unorm_sRGB)
 	pipeline_state_descriptor->setVertexFunction(vertex_program)
 	pipeline_state_descriptor->setFragmentFunction(fragment_program)
