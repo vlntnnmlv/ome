@@ -103,7 +103,6 @@ engine_process_events :: proc(engine: ^Engine) {
 			render.renderer_resize(engine.renderer, engine.window.info)
 			engine_broadcast_event(engine, event)
 		case platform.DropFileEvent:
-			assets.library_load_texture(engine.renderer.library, string(e.path), "tmp")
 			engine_broadcast_event(engine, event)
 		case platform.KeyEvent:
 			if engine_offer_event(engine, event) {

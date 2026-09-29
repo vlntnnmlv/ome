@@ -187,7 +187,6 @@ font_flush :: proc(font: ^Font, bind_table: ^gpu.BindTable) {
 				pixels = raw_data(font.bitmap),
 				width = font.bitmap_size,
 				height = font.bitmap_size,
-				channels = 1,
 			},
 			.R8_Unorm,
 		)

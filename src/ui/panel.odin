@@ -234,7 +234,7 @@ panel_render :: proc(scene: ^Scene, handle: PanelHandle, renderer: ^render.Rende
 	case TextSpec:
 		render.text(renderer, spec.text, spec.font_handle, spec.font_size, panel.rect, spec.color)
 	case ImageSpec:
-		render.texture_by_atlas_name(
+		render.sprite(
 			renderer,
 			spec.atlas_handle,
 			spec.sprite_name,

@@ -1,11 +1,9 @@
 package omegpu
 
 import "core:log"
-import "core:strings"
 
 import NS "core:sys/darwin/Foundation"
 import MTL "vendor:darwin/Metal"
-import STBI "vendor:stb/image"
 
 import "ome:core"
 import "ome:handle_map"
@@ -19,49 +17,13 @@ Texture :: struct {
 }
 
 TextureData :: struct {
-	name:     string,
-	pixels:   [^]byte,
-	width:    i32,
-	height:   i32,
-	channels: i32,
+	name:   string,
+	pixels: [^]byte,
+	width:  i32,
+	height: i32,
 }
 
 TextureHandle :: distinct handle_map.Handle
-
-texture_create :: proc(
-	bind_table: ^BindTable,
-	path: string,
-	name: string,
-	format: PixelFormat = .RGBA8_Unorm_sRGB,
-) -> (
-	TextureHandle,
-	Error,
-) {
-	w, h, channels: i32
-
-	cpath := strings.clone_to_cstring(path)
-	defer delete(cpath)
-	pixels := STBI.load(cpath, &w, &h, &channels, pixel_format_to_channels(format))
-	defer STBI.image_free(pixels)
-	if pixels == nil {
-		log.errorf(
-			"gpu/texture: failed to load texture at path '%s' with error %s",
-			path,
-			STBI.failure_reason(),
-		)
-		return {}, .Load
-	}
-
-	texture_data := TextureData {
-		pixels   = pixels,
-		width    = w,
-		height   = h,
-		channels = channels,
-		name     = name,
-	}
-
-	return texture_create_from_data(bind_table, texture_data, format)
-}
 
 PixelFormat :: enum {
 	R8_Unorm = 0,
@@ -128,6 +90,9 @@ texture_create_from_data :: proc(
 		texture_data.pixels,
 		NS.UInteger(texture_data.width * pixel_format_to_channels(format)),
 	)
+	label := NS.String.alloc()->initWithOdinString(string(texture_data.name))
+	texture->setLabel(label)
+	defer label->release()
 
 	handle, err := handle_map.add(&bind_table.textures, Texture{native = texture})
 	ensure(err == nil)
@@ -138,30 +103,30 @@ texture_create_from_data :: proc(
 	return handle, .None
 }
 
-texture_write :: proc(
-	bind_table: ^BindTable,
-	handle: TextureHandle,
-	pixels: [^]byte,
-	format: PixelFormat,
-) {
-	texture := handle_map.get(bind_table.textures, handle)
-	if texture == nil {
-		return
-	}
+// texture_write :: proc(
+// 	bind_table: ^BindTable,
+// 	handle: TextureHandle,
+// 	pixels: [^]byte,
+// 	format: PixelFormat,
+// ) {
+// 	texture := handle_map.get(bind_table.textures, handle)
+// 	if texture == nil {
+// 		return
+// 	}
 
-	w := texture.native->width()
-	h := texture.native->height()
-	region := MTL.Region {
-		origin = {0, 0, 0},
-		size   = {NS.Integer(w), NS.Integer(h), 1},
-	}
-	texture.native->replaceRegion(
-		region,
-		0,
-		pixels,
-		w * NS.UInteger(pixel_format_to_channels(format)),
-	)
-}
+// 	w := texture.native->width()
+// 	h := texture.native->height()
+// 	region := MTL.Region {
+// 		origin = {0, 0, 0},
+// 		size   = {NS.Integer(w), NS.Integer(h), 1},
+// 	}
+// 	texture.native->replaceRegion(
+// 		region,
+// 		0,
+// 		pixels,
+// 		w * NS.UInteger(pixel_format_to_channels(format)),
+// 	)
+// }
 
 texture_write_region :: proc(
 	bind_table: ^BindTable,
@@ -192,16 +157,16 @@ texture_write_region :: proc(
 	)
 }
 
-texture_size :: proc(bind_table: ^BindTable, handle: TextureHandle) -> ([2]f32, bool) {
-	tex := handle_map.get(bind_table.textures, handle)
-	if tex == nil {
-		return {0, 0}, false
-	}
+// texture_size :: proc(bind_table: ^BindTable, handle: TextureHandle) -> ([2]f32, bool) {
+// 	tex := handle_map.get(bind_table.textures, handle)
+// 	if tex == nil {
+// 		return {0, 0}, false
+// 	}
 
-	tw := f32(tex.native->width())
-	th := f32(tex.native->height())
-	return {tw, th}, true
-}
+// 	tw := f32(tex.native->width())
+// 	th := f32(tex.native->height())
+// 	return {tw, th}, true
+// }
 
 texture_destroy :: proc(bind_table: ^BindTable, handle: TextureHandle) {
 	if !handle_map.valid(bind_table.textures, handle) {

@@ -90,76 +90,12 @@ text :: proc(
 	}
 }
 
-texture :: proc {
-	texture_by_handle,
-	texture_by_name,
-	texture_by_atlas_name,
-}
-
-texture_by_handle :: proc(
-	renderer: ^Renderer,
-	texture_handle: gpu.TextureHandle,
-	rect: core.Rect,
-	color: core.Color = core.BLACK,
-	slice_offset: core.RectOffset = core.ZERO_RECT_OFFSET,
-	flip: core.Flip = {},
-) {
-	positions: []gpu.Position
-	uvs: []gpu.UV
-
-	positions_buffer: [VERTICES_PER_NINE_SLICED_QUAD]gpu.Position
-	uvs_buffer: [VERTICES_PER_NINE_SLICED_QUAD]gpu.UV
-
-	offset := core.rect_offset_flip(slice_offset, flip)
-	if offset != core.ZERO_RECT_OFFSET {
-		tex_size, ok := gpu.texture_size(renderer.device.bind_table, texture_handle)
-		if !ok {
-			return
-		}
-
-		positions_buffer = rect_to_vertices_positions_nine_slice(rect, offset)
-		uvs_buffer = rect_offset_to_uvs_nine_slice(offset, tex_size.x, tex_size.y)
-
-		positions = positions_buffer[:]
-		uvs = uvs_buffer[:]
-	} else {
-		quad_positions := rect_to_vertices_positions(rect)
-		quad_uvs := rect_to_uvs(core.UNIT_RECT)
-
-		copy(positions_buffer[:], quad_positions[:])
-		copy(uvs_buffer[:], quad_uvs[:])
-
-		positions = positions_buffer[:VERTICES_PER_QUAD]
-		uvs = uvs_buffer[:VERTICES_PER_QUAD]
-	}
-
-	uvs_mirror(uvs[:], core.UNIT_RECT, flip)
-	batch_add_texture(&renderer.batch, texture_handle, positions[:], uvs[:], color)
-}
-
-texture_by_name :: proc(
-	renderer: ^Renderer,
-	name: string,
-	rect: core.Rect,
-	color: core.Color = core.BLACK,
-	slice_offset: core.RectOffset = core.ZERO_RECT_OFFSET,
-	flip: core.Flip = {},
-) {
-	texture_handle, found := assets.library_find_texture(renderer.library, name)
-	if !found {
-		log.warnf("render: texture '%s' doesn't exist", name)
-		return
-	}
-
-	texture_by_handle(renderer, texture_handle, rect, color, slice_offset, flip)
-}
-
-texture_by_atlas_name :: proc(
+sprite :: proc(
 	renderer: ^Renderer,
 	atlas_handle: assets.AtlasHandle,
 	sprite_name: string,
 	rect: core.Rect,
-	color: core.Color = core.BLACK,
+	color: core.Color = core.WHITE,
 	slice_offset: core.RectOffset = core.ZERO_RECT_OFFSET,
 	flip: core.Flip = {},
 ) {
@@ -169,7 +105,55 @@ texture_by_atlas_name :: proc(
 		log.warnf("render: sprite '%s' is not in atlas '%s'", sprite_name, atlas.name)
 		return
 	}
+	textured_quad(
+		renderer,
+		atlas.texture_handle,
+		sprite.uv_rect,
+		atlas.size,
+		rect,
+		color,
+		slice_offset,
+		flip,
+	)
+}
 
+
+image :: proc(
+	renderer: ^Renderer,
+	image_handle: assets.ImageHandle,
+	rect: core.Rect,
+	color := core.WHITE,
+	slice_offset := core.ZERO_RECT_OFFSET,
+	flip: core.Flip = {},
+) {
+	image := assets.library_get_image(renderer.library, image_handle)
+	if image == nil {
+		return
+	}
+
+	textured_quad(
+		renderer,
+		image.texture_handle,
+		core.UNIT_RECT,
+		image.size,
+		rect,
+		color,
+		slice_offset,
+		flip,
+	)
+}
+
+@(private)
+textured_quad :: proc(
+	renderer: ^Renderer,
+	texture_handle: gpu.TextureHandle,
+	uv_rect: core.Rect,
+	texture_size: [2]f32,
+	rect: core.Rect,
+	color: core.Color,
+	slice_offset: core.RectOffset,
+	flip: core.Flip,
+) {
 	positions: []gpu.Position
 	uvs: []gpu.UV
 
@@ -179,11 +163,7 @@ texture_by_atlas_name :: proc(
 	offset := core.rect_offset_flip(slice_offset, flip)
 	if offset != core.ZERO_RECT_OFFSET {
 		positions_buffer = rect_to_vertices_positions_nine_slice(rect, offset)
-		uvs_buffer = rect_offset_to_uvs_nine_slice_atlas(
-			offset,
-			sprite.uv_rect,
-			{atlas.size, atlas.size},
-		)
+		uvs_buffer = rect_offset_to_uvs_nine_slice_atlas(offset, uv_rect, texture_size)
 
 		positions = positions_buffer[:]
 		uvs = uvs_buffer[:]
@@ -191,15 +171,15 @@ texture_by_atlas_name :: proc(
 		quad_positions := rect_to_vertices_positions(rect)
 		copy(positions_buffer[:], quad_positions[:])
 
-		quad_uvs := rect_to_uvs(sprite.uv_rect)
+		quad_uvs := rect_to_uvs(uv_rect)
 		copy(uvs_buffer[:], quad_uvs[:])
 
 		positions = positions_buffer[:VERTICES_PER_QUAD]
 		uvs = uvs_buffer[:VERTICES_PER_QUAD]
 	}
 
-	uvs_mirror(uvs, sprite.uv_rect, flip)
-	batch_add_texture(&renderer.batch, atlas.texture_handle, positions, uvs, color)
+	uvs_mirror(uvs, uv_rect, flip)
+	batch_add_texture(&renderer.batch, texture_handle, positions, uvs, color)
 }
 
 @(private = "file")

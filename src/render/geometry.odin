@@ -53,26 +53,6 @@ rect_to_uvs :: proc(rect: core.Rect) -> [VERTICES_PER_QUAD]gpu.UV {
 }
 
 @(private)
-rect_offset_to_uvs_nine_slice :: proc(
-	offset: core.RectOffset,
-	width, height: f32,
-) -> [VERTICES_PER_NINE_SLICED_QUAD]gpu.UV {
-	relative_offset := core.RectOffset {
-		offset.left / width,
-		offset.right / width,
-		offset.top / height,
-		offset.bottom / height,
-	}
-
-	uvs := [VERTICES_PER_NINE_SLICED_QUAD]gpu.UV{}
-	for cell, i in core.rect_split_to_grid(core.UNIT_RECT, relative_offset) {
-		cell_uvs := rect_to_uvs(cell)
-		copy(uvs[i * VERTICES_PER_QUAD:], cell_uvs[:])
-	}
-	return uvs
-}
-
-@(private)
 rect_offset_to_uvs_nine_slice_atlas :: proc(
 	offset: core.RectOffset,
 	uv_rect: core.Rect,

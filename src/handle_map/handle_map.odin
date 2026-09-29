@@ -139,4 +139,5 @@ delete :: proc(handle_map: ^Map($T, $HT)) {
 	virtual.arena_destroy(&handle_map.items_arena)
 	builtin.delete(handle_map.items)
 	builtin.delete(handle_map.unused_items)
+	handle_map^ = {}
 }

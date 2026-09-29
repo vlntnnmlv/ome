@@ -6,23 +6,23 @@ import "core:strings"
 import "ome:gpu"
 import "ome:handle_map"
 
-
 Error :: enum {
 	None = 0,
 	File,
 	Init,
 	Pack,
 	GPU,
-	Duplicate_Name,
+	// Duplicate_Name, TODO: Use for atlases, fonts and images
 }
 
 Library :: struct {
-	device:        ^gpu.Device,
-	fonts:         handle_map.Map(Font, FontHandle),
-	atlases:       handle_map.Map(Atlas, AtlasHandle),
-	texture_names: map[string]gpu.TextureHandle,
-	atlas_names:   map[string]AtlasHandle,
-	font_names:    map[string]FontHandle,
+	device:      ^gpu.Device,
+	fonts:       handle_map.Map(Font, FontHandle),
+	atlases:     handle_map.Map(Atlas, AtlasHandle),
+	images:      handle_map.Map(Image, ImageHandle),
+	image_names: map[string]ImageHandle,
+	atlas_names: map[string]AtlasHandle,
+	font_names:  map[string]FontHandle,
 }
 
 library_create :: proc(device: ^gpu.Device) -> ^Library {
@@ -34,11 +34,16 @@ library_create :: proc(device: ^gpu.Device) -> ^Library {
 	atlas_map, am_err := handle_map.make(Atlas, AtlasHandle)
 	ensure(am_err == nil)
 
+	image_map, im_err := handle_map.make(Image, ImageHandle)
+	ensure(im_err == nil)
+
 	library.device = device
+
 	library.fonts = font_map
 	library.atlases = atlas_map
+	library.images = image_map
 
-	library.texture_names = make(map[string]gpu.TextureHandle)
+	library.image_names = make(map[string]ImageHandle)
 	library.atlas_names = make(map[string]AtlasHandle)
 	library.font_names = make(map[string]FontHandle)
 
@@ -121,30 +126,53 @@ library_find_atlas :: proc(library: ^Library, name: string) -> (AtlasHandle, boo
 	return handle, found
 }
 
-library_load_texture :: proc(
-	library: ^Library,
-	path: string,
-	name: string,
-) -> (
-	gpu.TextureHandle,
-	Error,
-) {
-	if name in library.texture_names {
-		log.warnf("assets: texture with name '%s' already exists", name)
-		return gpu.TextureHandle{}, .Duplicate_Name
-	}
-	texture_handle, err := gpu.texture_create(library.device.bind_table, path, name)
-	if err != .None {
-		return {}, .GPU
+library_load_image :: proc(library: ^Library, path: string, name: string) -> (ImageHandle, Error) {
+	image_handle, err := handle_map.add(&library.images, Image{})
+	ensure(err == nil)
+
+	image := handle_map.get(library.images, image_handle)
+
+	ierr := image_load(image, library.device.bind_table, path, name)
+	if ierr != .None {
+		image_destroy(image, library.device.bind_table)
+		handle_map.remove(&library.images, image_handle)
+		return {}, ierr
 	}
 
-	library.texture_names[strings.clone(name)] = texture_handle
-	return texture_handle, .None
+	if name not_in library.image_names {
+		library.image_names[strings.clone(name)] = image_handle
+	} else {
+		log.warnf("assets: image with name '%s' already exists", name)
+	}
+
+	return image_handle, .None
 }
 
-library_find_texture :: proc(library: ^Library, name: string) -> (gpu.TextureHandle, bool) {
-	handle, found := library.texture_names[name]
+library_get_image :: proc(library: ^Library, handle: ImageHandle) -> ^Image {
+	return handle_map.get(library.images, handle)
+}
+
+library_find_image :: proc(library: ^Library, name: string) -> (ImageHandle, bool) {
+	handle, found := library.image_names[name]
 	return handle, found
+}
+
+library_unload_image :: proc(library: ^Library, handle: ImageHandle) {
+	image := handle_map.get(library.images, handle)
+	if image == nil {
+		return
+	}
+
+	for key, h in library.image_names {
+		if h == handle {
+			delete_key(&library.image_names, key)
+			delete(key)
+			break
+		}
+	}
+
+	image_destroy(image, library.device.bind_table)
+	handle_map.remove(&library.images, handle)
 }
 
 library_flush :: proc(library: ^Library) {
@@ -155,7 +183,7 @@ library_flush :: proc(library: ^Library) {
 }
 
 library_destroy :: proc(library: ^Library) {
-	for name, _ in library.texture_names {
+	for name, _ in library.image_names {
 		delete(name)
 	}
 	for name, _ in library.atlas_names {
@@ -163,6 +191,11 @@ library_destroy :: proc(library: ^Library) {
 	}
 	for name, _ in library.font_names {
 		delete(name)
+	}
+
+	iiter := handle_map.make_iter(&library.images)
+	for image in handle_map.iter(&iiter) {
+		image_destroy(image, library.device.bind_table)
 	}
 
 	fiter := handle_map.make_iter(&library.fonts)
@@ -175,10 +208,11 @@ library_destroy :: proc(library: ^Library) {
 		atlas_destroy(atlas)
 	}
 
-	delete(library.texture_names)
+	delete(library.image_names)
 	delete(library.atlas_names)
 	delete(library.font_names)
 
+	handle_map.delete(&library.images)
 	handle_map.delete(&library.fonts)
 	handle_map.delete(&library.atlases)
 

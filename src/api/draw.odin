@@ -74,6 +74,6 @@ l_sprite :: proc "c" (L: ^LUA.State) -> c.int {
 	rect := arg_rect(L, 3)
 	color := arg_color(L, 7, core.WHITE)
 	slice := arg_slice(L, 8)
-	render.texture_by_atlas_name(host.renderer, atlas_handle, sprite, rect, color, slice)
+	render.sprite(host.renderer, atlas_handle, sprite, rect, color, slice)
 	return 0
 }

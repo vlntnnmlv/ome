@@ -12,6 +12,12 @@ import "ome:core"
 import "ome:gpu"
 import "ome:handle_map"
 
+@(private)
+MIN_ATLAS_SIZE :: 512
+
+@(private)
+MAX_ATLAS_SIZE :: 4096
+
 AtlasHandle :: distinct handle_map.Handle
 
 Atlas :: struct {
@@ -19,7 +25,7 @@ Atlas :: struct {
 	texture_handle: gpu.TextureHandle,
 	name:           string,
 	sprites:        map[string](SpriteData),
-	size:           f32,
+	size:           [2]f32,
 }
 
 SpriteData :: struct {
@@ -114,26 +120,33 @@ atlas_load_from_files :: proc(
 		delete(images)
 	}
 
-	atlas_size: i32 = 512
-	ctx: STBRP.Context
-	nodes: []STBRP.Node = make([]STBRP.Node, atlas_size)
-
+	nodes := make([]STBRP.Node, MAX_ATLAS_SIZE)
 	defer delete(nodes)
 
-	STBRP.init_target(&ctx, atlas_size, atlas_size, raw_data(nodes), atlas_size)
-	pack_result := STBRP.pack_rects(&ctx, raw_data(rects), i32(len(rects)))
-
-	if pack_result == 0 {
-		for image in images {
-			delete(image.name)
+	atlas_size: i32 = MIN_ATLAS_SIZE
+	for {
+		ctx: STBRP.Context
+		STBRP.init_target(&ctx, atlas_size, atlas_size, raw_data(nodes), atlas_size)
+		if STBRP.pack_rects(&ctx, raw_data(rects), i32(len(rects))) != 0 {
+			break
 		}
-		delete(sprites)
-		log.infof("assets/atlas: failed to pack atlas '%s'", name)
-		return .Pack
-	} else {
-		log.infof("assets/atlas: atlas '%s' packed successfully", name)
-	}
 
+		if atlas_size >= MAX_ATLAS_SIZE {
+			for image in images {
+				delete(image.name)
+			}
+			delete(sprites)
+			log.errorf(
+				"assets/atlas: '%s' doesn't fit in %dx%d",
+				name,
+				MAX_ATLAS_SIZE,
+				MAX_ATLAS_SIZE,
+			)
+			return .Pack
+		}
+		atlas_size *= 2
+	}
+	log.infof("assets/atlas: atlas '%s' packed successfully", name)
 
 	size := f32(atlas_size)
 	for &image, i in images {
@@ -154,11 +167,10 @@ atlas_load_from_files :: proc(
 	defer delete(pixels)
 
 	atlas_data: gpu.TextureData = {
-		pixels   = raw_data(pixels),
-		width    = atlas_size,
-		height   = atlas_size,
-		channels = 4,
-		name     = name,
+		pixels = raw_data(pixels),
+		width  = atlas_size,
+		height = atlas_size,
+		name   = name,
 	}
 
 	texture_handle, gpu_err := atlas_build_texture(bind_table, images[:], atlas_data)
