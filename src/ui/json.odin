@@ -135,11 +135,25 @@ spec_from_object :: proc(library: ^assets.Library, obj: json.Object) -> (Spec, b
 			offset = core.RectOffset{slice[0], slice[1], slice[2], slice[3]}
 		}
 
+		flip: core.Flip = {}
+		flip_value, is_flip := json_string(obj, "flip", ""); if is_flip {
+			if flip_value == "x" {
+				flip = core.Flip{.X}
+			}
+			if flip_value == "y" {
+				flip = core.Flip{.Y}
+			}
+			if flip_value == "xy" {
+				flip = core.Flip{.X, .Y}
+			}
+		}
+
 		return ImageSpec {
 				panel = PanelSpec{color = color},
 				atlas_handle = atlas_handle,
 				sprite_name = sprite_name,
 				slice_offset = offset,
+				flip = flip,
 			},
 			true
 

@@ -8,6 +8,13 @@ Rect :: struct {
 	x, y, w, h: f32,
 }
 
+FlipAxis :: enum u8 {
+	X,
+	Y,
+}
+
+Flip :: bit_set[FlipAxis;u8]
+
 UNIT_RECT :: Rect{0, 0, 1, 1}
 ZERO_RECT :: Rect{0, 0, 0, 0}
 ZERO_RECT_OFFSET :: RectOffset{0, 0, 0, 0}
@@ -47,4 +54,13 @@ rect_split_to_grid :: proc(rect: Rect, offset: RectOffset) -> [9]Rect {
 		}
 	}
 	return cells
+}
+
+rect_offset_flip :: proc(offset: RectOffset, flip: Flip) -> RectOffset {
+	res := RectOffset(offset)
+
+	if .X in flip {c := res.left; res.left = res.right; res.right = c}
+	if .Y in flip {c := res.top; res.top = res.bottom; res.bottom = c}
+
+	return res
 }

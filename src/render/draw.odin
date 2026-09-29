@@ -1,6 +1,7 @@
 package omerender
 
 import "core:log"
+import "core:slice"
 
 import "ome:assets"
 import "ome:core"
@@ -118,6 +119,7 @@ texture_by_handle :: proc(
 	rect: core.Rect,
 	color: core.Color = core.BLACK,
 	slice_offset: core.RectOffset = core.ZERO_RECT_OFFSET,
+	flip: core.Flip = {},
 ) {
 	positions: [dynamic]gpu.Position
 	uvs: [dynamic]gpu.UV
@@ -135,6 +137,8 @@ texture_by_handle :: proc(
 		uvs = gpu.rect_to_uvs({0, 0, 1, 1})
 	}
 
+	gpu.uvs_mirror(uvs[:], core.UNIT_RECT, flip)
+
 	gpu.batch_add_texture(&renderer.batch, texture_handle, positions[:], uvs[:], color)
 }
 
@@ -144,6 +148,7 @@ texture_by_name :: proc(
 	rect: core.Rect,
 	color: core.Color = core.BLACK,
 	slice_offset: core.RectOffset = core.ZERO_RECT_OFFSET,
+	flip: core.Flip = {},
 ) {
 	texture_handle, found := assets.library_find_texture(renderer.library, name)
 	if !found {
@@ -151,7 +156,7 @@ texture_by_name :: proc(
 		return
 	}
 
-	texture_by_handle(renderer, texture_handle, rect, color, slice_offset)
+	texture_by_handle(renderer, texture_handle, rect, color, slice_offset, flip)
 }
 
 texture_by_atlas_name :: proc(
@@ -161,8 +166,8 @@ texture_by_atlas_name :: proc(
 	rect: core.Rect,
 	color: core.Color = core.BLACK,
 	slice_offset: core.RectOffset = core.ZERO_RECT_OFFSET,
+	flip: core.Flip = {},
 ) {
-
 	atlas := assets.library_get_atlas(renderer.library, atlas_handle)
 
 	positions: [dynamic]gpu.Position
@@ -178,7 +183,7 @@ texture_by_atlas_name :: proc(
 		positions = gpu.rect_to_vertices_positions_nine_slice(rect, slice_offset)
 		uvs = gpu.rect_offset_to_uvs_nine_slice_atlas(
 			slice_offset,
-			sprite.atlas_rect,
+			sprite.uv_rect,
 			{atlas.size, atlas.size},
 		)[:]
 	} else {
@@ -186,7 +191,9 @@ texture_by_atlas_name :: proc(
 		uvs = sprite.uvs
 	}
 
-	gpu.batch_add_texture(&renderer.batch, atlas.texture_handle, positions[:], uvs, color)
+	final_uvs := slice.clone(sprite.uvs, context.temp_allocator)
+	gpu.uvs_mirror(final_uvs[:], sprite.uv_rect, flip)
+	gpu.batch_add_texture(&renderer.batch, atlas.texture_handle, positions[:], final_uvs, color)
 }
 
 @(private = "file")

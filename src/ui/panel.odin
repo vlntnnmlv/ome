@@ -109,7 +109,8 @@ panel_from_description :: proc(
 	if panel_description.uuid == "" {
 		uuid = core.uuid_create(scene.allocator)
 	} else {
-		strings.clone(panel_description.uuid, scene.allocator)
+		_, err := strings.clone(panel_description.uuid, scene.allocator)
+		ensure(err == nil)
 	}
 
 	panel := panel_create_raw(
@@ -239,6 +240,7 @@ panel_render :: proc(scene: ^Scene, handle: PanelHandle, renderer: ^render.Rende
 			panel.rect,
 			spec.color,
 			spec.slice_offset,
+			spec.flip,
 		)
 	}
 

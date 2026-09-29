@@ -27,6 +27,7 @@ ImageSpec :: struct {
 	atlas_handle: assets.AtlasHandle,
 	sprite_name:  string,
 	slice_offset: core.RectOffset,
+	flip:         core.Flip,
 }
 
 TextSpec :: struct {

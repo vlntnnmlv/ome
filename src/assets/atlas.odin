@@ -25,6 +25,7 @@ Atlas :: struct {
 SpriteData :: struct {
 	uvs:        []gpu.UV,
 	atlas_rect: core.Rect,
+	uv_rect:    core.Rect,
 }
 
 @(private)
@@ -141,6 +142,12 @@ atlas_load_from_files :: proc(
 				allocator = context.allocator,
 			)[:],
 			atlas_rect = textures_data[i].atlas_rect,
+			uv_rect    = core.Rect {
+				textures_data[i].atlas_rect.x / f32(atlas_size),
+				textures_data[i].atlas_rect.y / f32(atlas_size),
+				textures_data[i].atlas_rect.w / f32(atlas_size),
+				textures_data[i].atlas_rect.h / f32(atlas_size),
+			},
 		}
 	}
 
