@@ -35,6 +35,13 @@ buffer_append :: proc(buffer: ^Buffer($T), data: []T) {
 	append(&buffer.cpu, ..data)
 }
 
+buffer_reserve :: proc(buffer: ^Buffer($T), n: int) -> []T {
+	old := len(buffer.cpu)
+	err := non_zero_resize(&buffer.cpu, old + n)
+	ensure(err == nil)
+	return buffer.cpu[old:]
+}
+
 buffer_zeros :: proc(buffer: ^Buffer($T), n: int) {
 	old := len(buffer.cpu)
 	resize(&buffer.cpu, old + n)

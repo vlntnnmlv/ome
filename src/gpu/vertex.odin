@@ -200,6 +200,32 @@ vertices_positions_to_vertices :: proc(
 	return vertices[:]
 }
 
+vertices_write :: proc(
+	destination: []Vertex2D,
+	positions: []Position,
+	uvs: []UV,
+	color: core.Color,
+	mode: Mode = .Primitive,
+	texture_id: TextureID = {},
+) {
+	assert(len(destination) == len(positions))
+	assert(len(uvs) == 0 || len(uvs) == len(positions))
+
+	lcolor := core.color_to_linear32(color)
+	for &v, i in destination {
+		v = Vertex2D {
+			position   = positions[i],
+			color      = lcolor,
+			mode       = mode,
+			texture_id = texture_id,
+		}
+	}
+
+	for uv, i in uvs {
+		destination[i].uv = uv
+	}
+}
+
 vertices_positions_and_uvs_to_vertices :: proc(
 	positions: []Position,
 	uvs: []UV,

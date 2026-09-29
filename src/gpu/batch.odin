@@ -159,6 +159,14 @@ batch_resize :: proc(batch: ^Batch, window_info: platform.WindowInfo) {
 	}
 }
 
+@(private)
+batch_reserve :: proc(batch: ^Batch, type: PrimitiveType, n: int) -> []Vertex2D {
+	start := len(batch.vertices.cpu)
+	vertices := buffer_reserve(&batch.vertices, n)
+	batch_append_render_call(batch, type, start, n)
+	return vertices
+}
+
 batch_destroy :: proc(batch: ^Batch) {
 	delete(batch.render_calls)
 	buffer_destroy(&batch.vertices)
@@ -194,7 +202,6 @@ batch_append_render_call :: proc(batch: ^Batch, type: PrimitiveType, start, coun
 }
 
 batch_add_points :: proc(batch: ^Batch, points: [][2]f32, color: core.Color, thickness: int = 1) {
-	start := len(batch.vertices.cpu)
 	positions: [dynamic]Position
 
 	if thickness > 1 {
@@ -203,25 +210,19 @@ batch_add_points :: proc(batch: ^Batch, points: [][2]f32, color: core.Color, thi
 		positions = points_to_vertices_positions(points)
 	}
 
-	vertices: []Vertex2D = vertices_positions_to_vertices(positions[:], color)
-	buffer_append(&batch.vertices, vertices[:])
-
 	type: PrimitiveType = .Line_Strip
 	if thickness > 1 {
 		type = .Triangle
 	}
-	batch_append_render_call(batch, type, start, len(vertices))
+
+	destination := batch_reserve(batch, type, len(positions))
+	vertices_write(destination, positions[:], nil, color)
 }
 
 batch_add_quad :: proc(batch: ^Batch, rect: core.Rect, color: core.Color) {
-	start := len(batch.vertices.cpu)
 	positions := rect_to_vertices_positions(rect)
-
-	vertices := vertices_positions_to_vertices(positions[:], color)
-
-	buffer_append(&batch.vertices, vertices)
-
-	batch_append_render_call(batch, .Triangle, start, len(vertices))
+	destination := batch_reserve(batch, .Triangle, len(positions))
+	vertices_write(destination, positions[:], nil, color)
 }
 
 batch_add_texture :: proc(
@@ -230,21 +231,10 @@ batch_add_texture :: proc(
 	positions: []Position,
 	uvs: []UV,
 	color: core.Color,
-	slice_offset: Maybe(core.RectOffset) = nil,
+	mode: Mode = .Texture,
 ) {
-	start := len(batch.vertices.cpu)
-
-	vertices := vertices_positions_and_uvs_to_vertices(
-		positions[:],
-		uvs[:],
-		color,
-		Mode.Texture,
-		TextureID(texture_handle.idx),
-	)
-
-	buffer_append(&batch.vertices, vertices)
-
-	batch_append_render_call(batch, .Triangle, start, len(vertices))
+	destination := batch_reserve(batch, .Triangle, len(positions))
+	vertices_write(destination, positions, uvs, color, mode, TextureID(texture_handle.idx))
 }
 
 batch_add_mesh :: proc(
@@ -253,12 +243,9 @@ batch_add_mesh :: proc(
 	color: core.Color,
 	cull: CullMode = .Back,
 ) {
-	start := len(batch.vertices.cpu)
-	vertices := vertices_positions_to_vertices(positions, color)
-	buffer_append(&batch.vertices, vertices)
-
 	previous := batch.active_state
 	batch.active_state.cull = cull
-	batch_append_render_call(batch, .Triangle, start, len(vertices))
+	destination := batch_reserve(batch, .Triangle, len(positions))
 	batch.active_state = previous
+	vertices_write(destination, positions[:], nil, color)
 }

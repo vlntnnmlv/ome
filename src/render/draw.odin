@@ -82,24 +82,9 @@ text :: proc(
 	assets.font_ensure_size(font, wanted_font_size)
 	real_font_size := assets.font_nearest_size(font, wanted_font_size)
 
-	start := len(renderer.batch.vertices.cpu)
-	total_positions, total_uvs := assets.font_text_layout(
-		font,
-		text,
-		real_font_size,
-		{rect.x, rect.y},
-	)
 
-	vertices := gpu.vertices_positions_and_uvs_to_vertices(
-		total_positions[:],
-		total_uvs[:],
-		color,
-		gpu.Mode.Text,
-		gpu.TextureID(font.texture_handle.idx),
-	)
-
-	gpu.buffer_append(&renderer.batch.vertices, vertices)
-	gpu.batch_append_render_call(&renderer.batch, .Triangle, start, len(vertices))
+	positions, uvs := assets.font_text_layout(font, text, real_font_size, {rect.x, rect.y})
+	gpu.batch_add_texture(&renderer.batch, font.texture_handle, positions, uvs, color, .Text)
 }
 
 texture :: proc {
