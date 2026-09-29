@@ -5,15 +5,20 @@ import "core:mem"
 import NS "core:sys/darwin/Foundation"
 import MTL "vendor:darwin/Metal"
 
+@(private)
 INITIAL_BUFFER_SIZE :: 1024
+
+@(private)
 GPU_BUFFERS_RING_SIZE :: 3
 
+@(private)
 Buffer :: struct($T: typeid) {
 	gpu_ring: [GPU_BUFFERS_RING_SIZE]^MTL.Buffer,
 	caps:     [GPU_BUFFERS_RING_SIZE]int,
 	device:   ^MTL.Device,
 }
 
+@(private)
 buffer_create :: proc($T: typeid, device: ^MTL.Device) -> Buffer(T) {
 	buffer: Buffer(T)
 	buffer.device = device

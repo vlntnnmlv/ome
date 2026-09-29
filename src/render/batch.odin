@@ -5,9 +5,13 @@ import "ome:gpu"
 import "ome:core"
 import "ome:platform"
 
+@(private)
 MAX_CAMERAS: u32 : 4
+
+@(private)
 INITIAL_VERTEX_CAPACITY :: 1024
 
+@(private)
 Batch :: struct {
 	vertices:     [dynamic]gpu.Vertex2D,
 	calls:        [dynamic]gpu.RenderCall,

@@ -12,6 +12,7 @@ import "ome:handle_map"
 
 MAX_TEXTURES :: 256
 
+@(private)
 Texture :: struct {
 	handle: TextureHandle,
 	native: ^MTL.Texture,

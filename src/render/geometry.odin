@@ -5,9 +5,13 @@ import "core:math/linalg"
 import "ome:core"
 import "ome:gpu"
 
+@(private)
 VERTICES_PER_QUAD :: 6
+
+@(private)
 VERTICES_PER_NINE_SLICED_QUAD :: 9 * VERTICES_PER_QUAD
 
+@(private)
 rect_to_vertices_positions :: proc(rect: core.Rect) -> [VERTICES_PER_QUAD]gpu.Position {
 	vertices := [VERTICES_PER_QUAD]gpu.Position{}
 	tl := point_to_vertex(rect.x, rect.y)
@@ -25,6 +29,7 @@ rect_to_vertices_positions :: proc(rect: core.Rect) -> [VERTICES_PER_QUAD]gpu.Po
 	return vertices
 }
 
+@(private)
 rect_to_vertices_positions_nine_slice :: proc(
 	rect: core.Rect,
 	rect_offset: core.RectOffset,
@@ -37,6 +42,7 @@ rect_to_vertices_positions_nine_slice :: proc(
 	return vertices
 }
 
+@(private)
 rect_to_uvs :: proc(rect: core.Rect) -> [VERTICES_PER_QUAD]gpu.UV {
 	tl := gpu.UV{rect.x, rect.y}
 	bl := gpu.UV{rect.x, rect.y + rect.h}
@@ -46,6 +52,7 @@ rect_to_uvs :: proc(rect: core.Rect) -> [VERTICES_PER_QUAD]gpu.UV {
 	return {tl, bl, br, tl, br, tr}
 }
 
+@(private)
 rect_offset_to_uvs_nine_slice :: proc(
 	offset: core.RectOffset,
 	width, height: f32,
@@ -65,6 +72,7 @@ rect_offset_to_uvs_nine_slice :: proc(
 	return uvs
 }
 
+@(private)
 rect_offset_to_uvs_nine_slice_atlas :: proc(
 	offset: core.RectOffset,
 	uv_rect: core.Rect,
@@ -85,7 +93,7 @@ rect_offset_to_uvs_nine_slice_atlas :: proc(
 	return uvs
 }
 
-// ---
+@(private)
 uvs_mirror :: proc(uvs: []gpu.UV, bounds: core.Rect, flip: core.Flip) {
 	c := gpu.UV{2 * bounds.x + bounds.w, 2 * bounds.y + bounds.h}
 	for &uv in uvs {
@@ -94,7 +102,7 @@ uvs_mirror :: proc(uvs: []gpu.UV, bounds: core.Rect, flip: core.Flip) {
 	}
 }
 
-// ---
+@(private)
 point_to_vertex :: proc {
 	point_to_vertex_xy,
 	point_to_vertex_array,
@@ -110,6 +118,7 @@ point_to_vertex_array :: proc(point: [2]f32) -> gpu.Position {
 	return {point.x, point.y, 0, 1}
 }
 
+@(private)
 points_to_vertices_positions :: proc(points: [][2]f32) -> [dynamic]gpu.Position {
 	vertices := make([dynamic]gpu.Position, context.temp_allocator)
 
@@ -120,6 +129,7 @@ points_to_vertices_positions :: proc(points: [][2]f32) -> [dynamic]gpu.Position 
 	return vertices
 }
 
+@(private)
 points_to_vertices_positions_thickness :: proc(
 	points: [][2]f32,
 	thickness: int,
@@ -145,27 +155,7 @@ points_to_vertices_positions_thickness :: proc(
 	return vertices
 }
 
-// // ---
-// vertices_positions_to_vertices :: proc(
-// 	positions: []gpu.Position,
-// 	color: core.Color,
-// 	mode: gpu.Mode = .Primitive,
-// 	texture_id: gpu.TextureID = {},
-// ) -> []gpu.Vertex2D {
-// 	vertices := make([dynamic]gpu.Vertex2D, len(positions), context.temp_allocator)
-// 	lcolor := core.color_to_linear32(color)
-// 	for p, i in positions {
-// 		vertices[i] = gpu.Vertex2D {
-// 			position   = p,
-// 			color      = lcolor,
-// 			mode       = mode,
-// 			texture_id = texture_id,
-// 		}
-// 	}
-
-// 	return vertices[:]
-// }
-
+@(private)
 vertices_write :: proc(
 	destination: []gpu.Vertex2D,
 	positions: []gpu.Position,
@@ -191,25 +181,3 @@ vertices_write :: proc(
 		destination[i].uv = uv
 	}
 }
-
-// vertices_positions_and_uvs_to_vertices :: proc(
-// 	positions: []gpu.Position,
-// 	uvs: []gpu.UV,
-// 	color: core.Color,
-// 	mode: gpu.Mode = .Primitive,
-// 	texture_id: gpu.TextureID = {},
-// ) -> []gpu.Vertex2D {
-// 	vertices := make([dynamic]gpu.Vertex2D, len(positions), context.temp_allocator)
-// 	lcolor := core.color_to_linear32(color)
-// 	for p, i in positions {
-// 		vertices[i] = gpu.Vertex2D {
-// 			position   = p,
-// 			uv         = uvs[i],
-// 			color      = lcolor,
-// 			mode       = mode,
-// 			texture_id = texture_id,
-// 		}
-// 	}
-
-// 	return vertices[:]
-// }

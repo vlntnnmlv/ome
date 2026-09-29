@@ -21,6 +21,7 @@ BindTable :: struct {
 	frame_number: u64,
 }
 
+@(private)
 bind_table_create :: proc(device: ^MTL.Device, fragment_fn: ^MTL.Function) -> ^BindTable {
 	bind_table := new(BindTable)
 	texture_map, err := handle_map.make(Texture, TextureHandle)
@@ -49,6 +50,7 @@ bind_table_create :: proc(device: ^MTL.Device, fragment_fn: ^MTL.Function) -> ^B
 	return bind_table
 }
 
+@(private)
 bind_table_begin_frame :: proc(bind_table: ^BindTable) {
 	bind_table.frame_number += 1
 
@@ -87,6 +89,7 @@ bind_table_set_slot :: proc(bind_table: ^BindTable, idx: u32, texture: ^MTL.Text
 	bind_table.encoder->setTexture(texture, NS.UInteger(idx))
 }
 
+@(private)
 bind_table_rebuild :: proc(bind_table: ^BindTable) {
 	bind_table.encoder->setArgumentBufferWithOffset(bind_table.arguments, 0)
 
@@ -107,6 +110,7 @@ bind_table_rebuild :: proc(bind_table: ^BindTable) {
 	bind_table.encoder->setSamplerState(bind_table.sampler, MAX_TEXTURES)
 }
 
+@(private)
 bind_table_destroy :: proc(bind_table: ^BindTable) {
 	it := handle_map.make_iter(&bind_table.textures)
 	for texture in handle_map.iter(&it) {

@@ -9,6 +9,7 @@ import CA "vendor:darwin/QuartzCore"
 
 import "ome:platform"
 
+@(private)
 FrameContext :: struct {
 	pool:           ^NS.AutoreleasePool,
 	drawable:       ^CA.MetalDrawable,
