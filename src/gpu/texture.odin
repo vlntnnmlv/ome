@@ -133,7 +133,8 @@ texture_create_from_data :: proc(
 	handle, err := handle_map.add(&bind_table.textures, Texture{native = texture})
 	ensure(err == nil)
 
-	bind_table_rebuild(bind_table)
+	bind_table_set_slot(bind_table, handle.idx, texture)
+	append(&bind_table.resources, cast(^MTL.Resource)texture)
 
 	return handle, .None
 }
@@ -163,6 +164,35 @@ texture_write :: proc(
 	)
 }
 
+texture_write_region :: proc(
+	bind_table: ^BindTable,
+	handle: TextureHandle,
+	rect: core.Rect,
+	pixels: [^]byte,
+	source_width: int,
+	format: PixelFormat,
+) {
+	texture := handle_map.get(bind_table.textures, handle)
+	if texture == nil {
+		return
+	}
+
+	channels := pixel_format_to_channels(format)
+	x, y := int(rect.x), int(rect.y)
+	bytes_per_row := source_width * int(channels)
+
+	region := MTL.Region {
+		origin = {NS.Integer(x), NS.Integer(y), 0},
+		size   = {NS.Integer(rect.w), NS.Integer(rect.h), 1},
+	}
+	texture.native->replaceRegion(
+		region,
+		0,
+		&pixels[y * bytes_per_row + x * int(channels)],
+		NS.UInteger(bytes_per_row),
+	)
+}
+
 texture_size :: proc(bind_table: ^BindTable, handle: TextureHandle) -> ([2]f32, bool) {
 	tex := handle_map.get(bind_table.textures, handle)
 	if tex == nil {
@@ -175,13 +205,9 @@ texture_size :: proc(bind_table: ^BindTable, handle: TextureHandle) -> ([2]f32, 
 }
 
 texture_destroy :: proc(bind_table: ^BindTable, handle: TextureHandle) {
-	texture := handle_map.get(bind_table.textures, handle)
-	if texture == nil {
+	if !handle_map.valid(bind_table.textures, handle) {
 		return
 	}
 
-	texture.native->release()
-	handle_map.remove(&bind_table.textures, handle)
-
-	bind_table_rebuild(bind_table)
+	append(&bind_table.pending, PendingRelease{handle, bind_table.frame_number})
 }

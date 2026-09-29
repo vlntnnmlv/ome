@@ -108,7 +108,7 @@ spec_from_object :: proc(library: ^assets.Library, obj: json.Object) -> (Spec, b
 	color := core.Color{255, 255, 255, 255}
 	c: [4]f32
 	if json_numbers(obj, "color", c[:]) {
-		color = core.Color{u8(c[0]), u8(c[1]), u8(c[2]), u8(c[3])}
+		color = core.color_clamp(c)
 	}
 
 	switch kind {

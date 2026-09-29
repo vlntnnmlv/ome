@@ -163,6 +163,7 @@ device_begin :: proc(device: ^Device) -> bool {
 	}
 
 	device.frame_slot_index = (device.frame_slot_index + 1) % GPU_BUFFERS_RING_SIZE
+	bind_table_begin_frame(device.bind_table)
 
 	pass := MTL.RenderPassDescriptor.renderPassDescriptor()
 	color_attachment := pass->colorAttachments()->object(0)

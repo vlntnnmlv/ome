@@ -56,6 +56,17 @@ rect_split_to_grid :: proc(rect: Rect, offset: RectOffset) -> [9]Rect {
 	return cells
 }
 
+rect_union :: proc(a, b: Rect) -> Rect {
+	if a.w <= 0 || a.h <= 0 {return b}
+	if b.w <= 0 || b.h <= 0 {return a}
+
+	x0 := min(a.x, b.x)
+	y0 := min(a.y, b.y)
+	x1 := max(a.x + a.w, b.x + b.w)
+	y1 := max(a.y + a.h, b.y + b.h)
+	return Rect{x0, y0, x1 - x0, y1 - y0}
+}
+
 rect_offset_flip :: proc(offset: RectOffset, flip: Flip) -> RectOffset {
 	res := RectOffset(offset)
 

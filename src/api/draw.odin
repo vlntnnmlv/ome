@@ -23,10 +23,9 @@ l_outline :: proc "c" (L: ^LUA.State) -> c.int {
 	rect := arg_rect(L, 1)
 	color := arg_color(L, 5, core.WHITE)
 	thickness := int(LUA.L_optinteger(L, 6, 1))
-	render.quad(host.renderer, rect, color, thickness, false)
+	render.quad(host.renderer, rect, color, thickness)
 	return 0
 }
-
 
 @(private)
 l_line :: proc "c" (L: ^LUA.State) -> c.int {

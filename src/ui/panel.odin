@@ -109,7 +109,8 @@ panel_from_description :: proc(
 	if panel_description.uuid == "" {
 		uuid = core.uuid_create(scene.allocator)
 	} else {
-		_, err := strings.clone(panel_description.uuid, scene.allocator)
+		err: mem.Allocator_Error
+		uuid, err = strings.clone(panel_description.uuid, scene.allocator)
 		ensure(err == nil)
 	}
 
@@ -222,14 +223,14 @@ panel_render :: proc(scene: ^Scene, handle: PanelHandle, renderer: ^render.Rende
 		if panel.pressed {
 			color = core.Color{0, 0, 255, 255}
 		}
-		render.quad(renderer, panel.rect, color, 1, false)
+		render.quad(renderer, panel.rect, color, 1)
 	}
 
 	switch spec in panel.spec {
 	case PanelSpec:
 		break
 	case ButtonSpec:
-		render.quad(renderer, panel.rect, spec.color, 1, false)
+		render.quad(renderer, panel.rect, spec.color, 1)
 	case TextSpec:
 		render.text(renderer, spec.text, spec.font_handle, spec.font_size, panel.rect, spec.color)
 	case ImageSpec:

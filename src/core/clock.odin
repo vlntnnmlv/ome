@@ -9,7 +9,7 @@ Clock :: struct {
 	fps:            f64,
 	frame_count:    int,
 	dt:             f32,
-	time:           f32,
+	time:           f64,
 }
 
 clock_start :: proc(clock: ^Clock) {
@@ -32,5 +32,5 @@ clock_update :: proc(clock: ^Clock) {
 	}
 
 	clock.dt = f32(time.duration_seconds(time.since(clock.frame_start)))
-	clock.time += clock.dt
+	clock.time += f64(clock.dt)
 }

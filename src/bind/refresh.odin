@@ -47,11 +47,7 @@ binder_refresh_panel :: proc(
 			c: [4]f32
 			err, msg = script.vm_get_numbers(binder.vm, view.module_ref, binding.path, c[:])
 			if err == .None {
-				ui.panel_set_color(
-					scene,
-					handle,
-					core.Color{u8(c[0]), u8(c[1]), u8(c[2]), u8(c[3])},
-				)
+				ui.panel_set_color(scene, handle, core.color_clamp(c))
 			}
 		}
 		if err != .None && err != .Missing {

@@ -48,12 +48,7 @@ arg_color :: proc(L: ^LUA.State, idx: c.int, fallback: core.Color) -> core.Color
 		return fallback
 	}
 
-	return core.Color {
-		u8(clamp(v[0], 0, 255)),
-		u8(clamp(v[1], 0, 255)),
-		u8(clamp(v[2], 0, 255)),
-		u8(clamp(v[3], 0, 255)),
-	}
+	return core.color_clamp(v)
 }
 
 @(private)

@@ -32,7 +32,7 @@ Font :: struct {
 	unpackable:     [dynamic]u32,
 	char_data:      map[u32][]STBTT.packedchar,
 	texture_handle: gpu.TextureHandle,
-	dirty:          bool,
+	dirty_rect:     core.Rect,
 }
 
 font_ensure_size :: proc(font: ^Font, size: u32) {
@@ -138,6 +138,10 @@ font_pack_size :: proc(font: ^Font, size: u32) -> Error {
 			delete(chars)
 			return .Pack
 		}
+		font.dirty_rect = core.rect_union(
+			font.dirty_rect,
+			core.Rect{f32(r.x), f32(r.y), f32(r.w), f32(r.h)},
+		)
 	}
 
 	STBTT.PackFontRangesRenderIntoRects(&font.pack_context, &font.info, &range, 1, raw_data(rects))
@@ -145,7 +149,6 @@ font_pack_size :: proc(font: ^Font, size: u32) -> Error {
 	font.char_data[size] = chars
 	append(&font.sizes, size)
 	slice.sort(font.sizes[:])
-	font.dirty = true
 
 	return .None
 }
@@ -164,7 +167,7 @@ font_flush :: proc(font: ^Font, bind_table: ^gpu.BindTable) {
 	}
 	clear(&font.pending)
 
-	if !font.dirty {
+	if font.dirty_rect.w <= 0 || font.dirty_rect.h <= 0 {
 		return
 	}
 
@@ -187,10 +190,17 @@ font_flush :: proc(font: ^Font, bind_table: ^gpu.BindTable) {
 		}
 		font.texture_handle = texture_handle
 	} else {
-		gpu.texture_write(bind_table, font.texture_handle, raw_data(font.bitmap), .R8_Unorm)
+		gpu.texture_write_region(
+			bind_table,
+			font.texture_handle,
+			font.dirty_rect,
+			raw_data(font.bitmap),
+			int(font.bitmap_size),
+			.R8_Unorm,
+		)
 	}
 
-	font.dirty = false
+	font.dirty_rect = {}
 }
 
 @(private)

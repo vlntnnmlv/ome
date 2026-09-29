@@ -11,7 +11,7 @@
 			"color": [255, 255, 255, 255],
 			"slice": [8, 8, 8, 8],
 			"flip": "",
-			"bind": [{ "flip": "flip" }]
+			"bind": { "flip": "flip" }
 		}
 	]
 }

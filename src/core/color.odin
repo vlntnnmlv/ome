@@ -36,3 +36,26 @@ color_to_linear64 :: proc(c: Color) -> [4]f64 {
 	l := color_to_linear32(c)
 	return {f64(l.r), f64(l.g), f64(l.b), f64(l.a)}
 }
+
+color_clamp :: proc {
+	color_clamp_color,
+	color_clamp_color_array,
+}
+
+color_clamp_color :: proc(c: Color) -> Color {
+	return Color {
+		u8(clamp(c.r, 0, 255)),
+		u8(clamp(c.g, 0, 255)),
+		u8(clamp(c.b, 0, 255)),
+		u8(clamp(c.a, 0, 255)),
+	}
+}
+
+color_clamp_color_array :: proc(c: [4]f32) -> Color {
+	return Color {
+		u8(clamp(c.r, 0, 255)),
+		u8(clamp(c.g, 0, 255)),
+		u8(clamp(c.b, 0, 255)),
+		u8(clamp(c.a, 0, 255)),
+	}
+}

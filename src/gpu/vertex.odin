@@ -31,8 +31,8 @@ Vertex2D :: struct {
 rect_to_vertices_positions_nine_slice :: proc(
 	rect: core.Rect,
 	rect_offset: core.RectOffset,
-) -> [dynamic]Position {
-	vertices := make([dynamic]Position, VERTICES_PER_NINE_SLICED_QUAD, context.temp_allocator)
+) -> [VERTICES_PER_NINE_SLICED_QUAD]Position {
+	vertices := [VERTICES_PER_NINE_SLICED_QUAD]Position{}
 	for cell, i in core.rect_split_to_grid(rect, rect_offset) {
 		rect_vertices := rect_to_vertices_positions(cell)
 		copy(vertices[i * VERTICES_PER_QUAD:], rect_vertices[:])
@@ -40,8 +40,8 @@ rect_to_vertices_positions_nine_slice :: proc(
 	return vertices
 }
 
-rect_to_vertices_positions :: proc(rect: core.Rect) -> [dynamic]Position {
-	vertices := make([dynamic]Position, VERTICES_PER_QUAD, context.temp_allocator)
+rect_to_vertices_positions :: proc(rect: core.Rect) -> [VERTICES_PER_QUAD]Position {
+	vertices := [VERTICES_PER_QUAD]Position{}
 	tl := point_to_vertex(rect.x, rect.y)
 	bl := point_to_vertex(rect.x, rect.y + rect.h)
 	br := point_to_vertex(rect.x + rect.w, rect.y + rect.h)
@@ -59,47 +59,28 @@ rect_to_vertices_positions :: proc(rect: core.Rect) -> [dynamic]Position {
 
 // --- Rect to UVs ---
 
-rect_to_uvs :: proc(rect: core.Rect) -> [dynamic]UV {
-	uvs := make([dynamic]UV, VERTICES_PER_QUAD, context.temp_allocator)
-
+rect_to_uvs :: proc(rect: core.Rect) -> [VERTICES_PER_QUAD]UV {
 	tl := UV{rect.x, rect.y}
 	bl := UV{rect.x, rect.y + rect.h}
 	br := UV{rect.x + rect.w, rect.y + rect.h}
 	tr := UV{rect.x + rect.w, rect.y}
 
-	uvs[0] = tl
-	uvs[1] = bl
-	uvs[2] = br
-	uvs[3] = tl
-	uvs[4] = br
-	uvs[5] = tr
-
-	return uvs
+	return {tl, bl, br, tl, br, tr}
 }
 
-rect_to_uvs_atlas :: proc(
-	rect: core.Rect,
-	atlas_size: [2]f32,
-	allocator: mem.Allocator = context.temp_allocator,
-) -> [dynamic]UV {
-	uvs := make([dynamic]UV, VERTICES_PER_QUAD, allocator)
-
+rect_to_uvs_atlas :: proc(rect: core.Rect, atlas_size: [2]f32) -> [VERTICES_PER_QUAD]UV {
 	tl := UV{rect.x / atlas_size.x, rect.y / atlas_size.y}
 	bl := UV{rect.x / atlas_size.x, (rect.y + rect.h) / atlas_size.y}
 	br := UV{(rect.x + rect.w) / atlas_size.x, (rect.y + rect.h) / atlas_size.y}
 	tr := UV{(rect.x + rect.w) / atlas_size.x, rect.y / atlas_size.y}
 
-	uvs[0] = tl
-	uvs[1] = bl
-	uvs[2] = br
-	uvs[3] = tl
-	uvs[4] = br
-	uvs[5] = tr
-
-	return uvs
+	return {tl, bl, br, tl, br, tr}
 }
 
-rect_offset_to_uvs_nine_slice :: proc(offset: core.RectOffset, width, height: f32) -> [dynamic]UV {
+rect_offset_to_uvs_nine_slice :: proc(
+	offset: core.RectOffset,
+	width, height: f32,
+) -> [VERTICES_PER_NINE_SLICED_QUAD]UV {
 	relative_offset := core.RectOffset {
 		offset.left / width,
 		offset.right / width,
@@ -107,10 +88,10 @@ rect_offset_to_uvs_nine_slice :: proc(offset: core.RectOffset, width, height: f3
 		offset.bottom / height,
 	}
 
-	uvs := make([dynamic]UV, VERTICES_PER_NINE_SLICED_QUAD, context.temp_allocator)
+	uvs := [VERTICES_PER_NINE_SLICED_QUAD]UV{}
 	for cell, i in core.rect_split_to_grid(core.UNIT_RECT, relative_offset) {
-		rect_uvs := rect_to_uvs(cell)
-		copy(uvs[i * VERTICES_PER_QUAD:], rect_uvs[:])
+		cell_uvs := rect_to_uvs(cell)
+		copy(uvs[i * VERTICES_PER_QUAD:], cell_uvs[:])
 	}
 	return uvs
 }
@@ -120,7 +101,7 @@ rect_offset_to_uvs_nine_slice_atlas :: proc(
 	uv_rect: core.Rect,
 	atlas_size: [2]f32,
 	allocator: mem.Allocator = context.temp_allocator,
-) -> [dynamic]UV {
+) -> [VERTICES_PER_NINE_SLICED_QUAD]UV {
 	relative_offset := core.RectOffset {
 		offset.left / atlas_size.x,
 		offset.right / atlas_size.x,
@@ -128,7 +109,7 @@ rect_offset_to_uvs_nine_slice_atlas :: proc(
 		offset.bottom / atlas_size.y,
 	}
 
-	uvs := make([dynamic]UV, VERTICES_PER_NINE_SLICED_QUAD, allocator)
+	uvs := [VERTICES_PER_NINE_SLICED_QUAD]UV{}
 	for cell, i in core.rect_split_to_grid(uv_rect, relative_offset) {
 		rect_uvs := rect_to_uvs(cell)
 		copy(uvs[i * VERTICES_PER_QUAD:], rect_uvs[:])
@@ -206,10 +187,11 @@ vertices_positions_to_vertices :: proc(
 	texture_id: TextureID = TextureID{},
 ) -> []Vertex2D {
 	vertices := make([dynamic]Vertex2D, len(positions), context.temp_allocator)
+	lcolor := core.color_to_linear32(color)
 	for p, i in positions {
 		vertices[i] = Vertex2D {
 			position   = p,
-			color      = core.color_to_linear32(color),
+			color      = lcolor,
 			mode       = mode,
 			texture_id = texture_id,
 		}
@@ -226,11 +208,12 @@ vertices_positions_and_uvs_to_vertices :: proc(
 	texture_id: TextureID = TextureID{},
 ) -> []Vertex2D {
 	vertices := make([dynamic]Vertex2D, len(positions), context.temp_allocator)
+	lcolor := core.color_to_linear32(color)
 	for p, i in positions {
 		vertices[i] = Vertex2D {
 			position   = p,
 			uv         = uvs[i],
-			color      = core.color_to_linear32(color),
+			color      = lcolor,
 			mode       = mode,
 			texture_id = texture_id,
 		}

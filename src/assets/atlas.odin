@@ -23,7 +23,7 @@ Atlas :: struct {
 }
 
 SpriteData :: struct {
-	uvs:        []gpu.UV,
+	uvs:        [gpu.VERTICES_PER_QUAD]gpu.UV,
 	atlas_rect: core.Rect,
 	uv_rect:    core.Rect,
 }
@@ -128,6 +128,7 @@ atlas_load_from_files :: proc(
 		log.infof("assets/atlas: atlas '%s' packed successfully", name)
 	}
 
+	// uvs: [gpu.VERTICES_PER_QUAD]gpu.UV
 	for i in 0 ..< len(rects) {
 		textures_data[i].atlas_rect.x = f32(rects[i].x)
 		textures_data[i].atlas_rect.y = f32(rects[i].y)
@@ -139,8 +140,7 @@ atlas_load_from_files :: proc(
 			uvs        = gpu.rect_to_uvs_atlas(
 				textures_data[i].atlas_rect,
 				{f32(atlas_size), f32(atlas_size)},
-				allocator = context.allocator,
-			)[:],
+			),
 			atlas_rect = textures_data[i].atlas_rect,
 			uv_rect    = core.Rect {
 				textures_data[i].atlas_rect.x / f32(atlas_size),
@@ -204,9 +204,8 @@ atlas_build_texture :: proc(
 
 @(private)
 atlas_destroy :: proc(atlas: ^Atlas) {
-	for name, sprite in atlas.sprites {
+	for name in atlas.sprites {
 		delete(name)
-		delete(sprite.uvs)
 	}
 
 	delete(atlas.sprites)

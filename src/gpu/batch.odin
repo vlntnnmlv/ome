@@ -193,13 +193,7 @@ batch_append_render_call :: proc(batch: ^Batch, type: PrimitiveType, start, coun
 	}
 }
 
-batch_add_points :: proc(
-	batch: ^Batch,
-	points: [][2]f32,
-	color: core.Color,
-	fill: bool = false,
-	thickness: int = 1,
-) {
+batch_add_points :: proc(batch: ^Batch, points: [][2]f32, color: core.Color, thickness: int = 1) {
 	start := len(batch.vertices.cpu)
 	positions: [dynamic]Position
 
@@ -213,7 +207,7 @@ batch_add_points :: proc(
 	buffer_append(&batch.vertices, vertices[:])
 
 	type: PrimitiveType = .Line_Strip
-	if fill || thickness > 1 {
+	if thickness > 1 {
 		type = .Triangle
 	}
 	batch_append_render_call(batch, type, start, len(vertices))
