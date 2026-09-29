@@ -6,7 +6,6 @@ import "core:unicode/utf8"
 import STBTT "vendor:stb/truetype"
 
 import "ome:core"
-import "ome:gpu"
 
 StringPrintableIterator :: struct {
 	s: string,
@@ -30,52 +29,55 @@ printable_iter :: proc(it: ^StringPrintableIterator) -> (rune, int, bool) {
 	return 0, len(it.s), false
 }
 
-font_text_layout :: proc(
+Glyph :: struct {
+	rect:    core.Rect,
+	uv_rect: core.Rect,
+}
+
+GlyphIterator :: struct {
+	font:   ^Font,
+	chars:  []STBTT.packedchar,
+	text:   StringPrintableIterator,
+	origin: [2]f32,
+}
+
+font_make_glyphs_iterator :: proc(
 	font: ^Font,
 	text: string,
 	font_size: u32,
 	origin: [2]f32,
-) -> (
-	[]gpu.Position,
-	[]gpu.UV,
-) {
-	origin := origin
+) -> GlyphIterator {
+	return GlyphIterator {
+		font = font,
+		chars = font.char_data[font_size],
+		text = StringPrintableIterator{text, 0},
+		origin = origin,
+	}
+}
 
-	cap := len(text) * gpu.VERTICES_PER_QUAD
-	total_positions := make([dynamic]gpu.Position, 0, cap, context.temp_allocator)
-	total_uvs := make([dynamic]gpu.UV, 0, cap, context.temp_allocator)
-
-	it := StringPrintableIterator{text, 0}
-	for char in printable_iter(&it) {
-		quad: STBTT.aligned_quad
-		STBTT.GetPackedQuad(
-			&font.char_data[font_size][0],
-			font.bitmap_size,
-			font.bitmap_size,
-			i32(char) - FIRST_CHAR,
-			&origin.x,
-			&origin.y,
-			&quad,
-			true,
-		)
-
-		char_rect := core.Rect{quad.x0, quad.y0, quad.x1 - quad.x0, quad.y1 - quad.y0}
-		vertices := gpu.rect_to_vertices_positions(char_rect)
-
-		uvs := [gpu.VERTICES_PER_QUAD]gpu.UV {
-			{quad.s0, quad.t0},
-			{quad.s0, quad.t1},
-			{quad.s1, quad.t1},
-			{quad.s0, quad.t0},
-			{quad.s1, quad.t1},
-			{quad.s1, quad.t0},
-		}
-
-		append(&total_positions, ..vertices[:])
-		append(&total_uvs, ..uvs[:])
+font_iter_glyphs :: proc(it: ^GlyphIterator) -> (Glyph, bool) {
+	char, _, ok := printable_iter(&it.text)
+	if !ok {
+		return {}, false
 	}
 
-	return total_positions[:], total_uvs[:]
+	quad: STBTT.aligned_quad
+	STBTT.GetPackedQuad(
+		&it.chars[0],
+		it.font.bitmap_size,
+		it.font.bitmap_size,
+		i32(char) - FIRST_CHAR,
+		&it.origin.x,
+		&it.origin.y,
+		&quad,
+		true,
+	)
+
+	return Glyph {
+			rect = core.Rect{quad.x0, quad.y0, quad.x1 - quad.x0, quad.y1 - quad.y0},
+			uv_rect = core.Rect{quad.s0, quad.t0, quad.s1 - quad.s0, quad.t1 - quad.t0},
+		},
+		true
 }
 
 font_text_measure :: proc(font: ^Font, text: string, font_size: u32) -> [2]f32 {

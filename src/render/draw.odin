@@ -13,7 +13,7 @@ line :: proc(
 	color: core.Color = core.BLACK,
 	thickness: int = 1,
 ) {
-	gpu.batch_add_points(&renderer.batch, {start, end}, color, thickness)
+	batch_add_points(&renderer.batch, {start, end}, color, thickness)
 }
 
 segments :: proc(
@@ -22,7 +22,7 @@ segments :: proc(
 	color: core.Color = core.BLACK,
 	thickness: int = 1,
 ) {
-	gpu.batch_add_points(&renderer.batch, points, color, thickness)
+	batch_add_points(&renderer.batch, points, color, thickness)
 }
 
 curve :: proc(
@@ -65,7 +65,7 @@ quad :: proc(
 }
 
 rect :: proc(renderer: ^Renderer, rect: core.Rect, color: core.Color = core.BLACK) {
-	gpu.batch_add_quad(&renderer.batch, rect, color)
+	batch_add_quad(&renderer.batch, rect, color)
 }
 
 text :: proc(
@@ -82,9 +82,12 @@ text :: proc(
 	assets.font_ensure_size(font, wanted_font_size)
 	real_font_size := assets.font_nearest_size(font, wanted_font_size)
 
-
-	positions, uvs := assets.font_text_layout(font, text, real_font_size, {rect.x, rect.y})
-	gpu.batch_add_texture(&renderer.batch, font.texture_handle, positions, uvs, color, .Text)
+	it := assets.font_make_glyphs_iterator(font, text, real_font_size, {rect.x, rect.y})
+	for glyph in assets.font_iter_glyphs(&it) {
+		positions := rect_to_vertices_positions(glyph.rect)
+		uvs := rect_to_uvs(glyph.uv_rect)
+		batch_add_texture(&renderer.batch, font.texture_handle, positions[:], uvs[:], color, .Text)
+	}
 }
 
 texture :: proc {
@@ -104,8 +107,8 @@ texture_by_handle :: proc(
 	positions: []gpu.Position
 	uvs: []gpu.UV
 
-	positions_buffer: [gpu.VERTICES_PER_NINE_SLICED_QUAD]gpu.Position
-	uvs_buffer: [gpu.VERTICES_PER_NINE_SLICED_QUAD]gpu.UV
+	positions_buffer: [VERTICES_PER_NINE_SLICED_QUAD]gpu.Position
+	uvs_buffer: [VERTICES_PER_NINE_SLICED_QUAD]gpu.UV
 
 	offset := core.rect_offset_flip(slice_offset, flip)
 	if offset != core.ZERO_RECT_OFFSET {
@@ -114,24 +117,24 @@ texture_by_handle :: proc(
 			return
 		}
 
-		positions_buffer = gpu.rect_to_vertices_positions_nine_slice(rect, offset)
-		uvs_buffer = gpu.rect_offset_to_uvs_nine_slice(offset, tex_size.x, tex_size.y)
+		positions_buffer = rect_to_vertices_positions_nine_slice(rect, offset)
+		uvs_buffer = rect_offset_to_uvs_nine_slice(offset, tex_size.x, tex_size.y)
 
 		positions = positions_buffer[:]
 		uvs = uvs_buffer[:]
 	} else {
-		quad_positions := gpu.rect_to_vertices_positions(rect)
-		quad_uvs := gpu.rect_to_uvs(core.UNIT_RECT)
+		quad_positions := rect_to_vertices_positions(rect)
+		quad_uvs := rect_to_uvs(core.UNIT_RECT)
 
 		copy(positions_buffer[:], quad_positions[:])
 		copy(uvs_buffer[:], quad_uvs[:])
 
-		positions = positions_buffer[:gpu.VERTICES_PER_QUAD]
-		uvs = uvs_buffer[:gpu.VERTICES_PER_QUAD]
+		positions = positions_buffer[:VERTICES_PER_QUAD]
+		uvs = uvs_buffer[:VERTICES_PER_QUAD]
 	}
 
-	gpu.uvs_mirror(uvs[:], core.UNIT_RECT, flip)
-	gpu.batch_add_texture(&renderer.batch, texture_handle, positions[:], uvs[:], color)
+	uvs_mirror(uvs[:], core.UNIT_RECT, flip)
+	batch_add_texture(&renderer.batch, texture_handle, positions[:], uvs[:], color)
 }
 
 texture_by_name :: proc(
@@ -170,13 +173,13 @@ texture_by_atlas_name :: proc(
 	positions: []gpu.Position
 	uvs: []gpu.UV
 
-	positions_buffer: [gpu.VERTICES_PER_NINE_SLICED_QUAD]gpu.Position
-	uvs_buffer: [gpu.VERTICES_PER_NINE_SLICED_QUAD]gpu.UV
+	positions_buffer: [VERTICES_PER_NINE_SLICED_QUAD]gpu.Position
+	uvs_buffer: [VERTICES_PER_NINE_SLICED_QUAD]gpu.UV
 
 	offset := core.rect_offset_flip(slice_offset, flip)
 	if offset != core.ZERO_RECT_OFFSET {
-		positions_buffer = gpu.rect_to_vertices_positions_nine_slice(rect, offset)
-		uvs_buffer = gpu.rect_offset_to_uvs_nine_slice_atlas(
+		positions_buffer = rect_to_vertices_positions_nine_slice(rect, offset)
+		uvs_buffer = rect_offset_to_uvs_nine_slice_atlas(
 			offset,
 			sprite.uv_rect,
 			{atlas.size, atlas.size},
@@ -185,17 +188,18 @@ texture_by_atlas_name :: proc(
 		positions = positions_buffer[:]
 		uvs = uvs_buffer[:]
 	} else {
-		quad_positions := gpu.rect_to_vertices_positions(rect)
+		quad_positions := rect_to_vertices_positions(rect)
 		copy(positions_buffer[:], quad_positions[:])
 
-		copy(uvs_buffer[:], sprite.uvs[:])
+		quad_uvs := rect_to_uvs(sprite.uv_rect)
+		copy(uvs_buffer[:], quad_uvs[:])
 
-		positions = positions_buffer[:gpu.VERTICES_PER_QUAD]
-		uvs = uvs_buffer[:gpu.VERTICES_PER_QUAD]
+		positions = positions_buffer[:VERTICES_PER_QUAD]
+		uvs = uvs_buffer[:VERTICES_PER_QUAD]
 	}
 
-	gpu.uvs_mirror(uvs, sprite.uv_rect, flip)
-	gpu.batch_add_texture(&renderer.batch, atlas.texture_handle, positions, uvs, color)
+	uvs_mirror(uvs, sprite.uv_rect, flip)
+	batch_add_texture(&renderer.batch, atlas.texture_handle, positions, uvs, color)
 }
 
 @(private = "file")
@@ -231,5 +235,5 @@ cube :: proc(renderer: ^Renderer, center: [3]f32, size: f32, color: core.Color =
 		append(&positions, quad[0], quad[1], quad[2], quad[0], quad[2], quad[3])
 	}
 
-	gpu.batch_add_mesh(&renderer.batch, positions[:], color)
+	batch_add_mesh(&renderer.batch, positions[:], color)
 }

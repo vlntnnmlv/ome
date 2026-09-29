@@ -23,6 +23,7 @@ Device :: struct {
 	swapchain:            ^CA.MetalLayer,
 	clear_color:          MTL.ClearColor,
 	bind_table:           ^BindTable,
+	vertex_ring:          Buffer(Vertex2D),
 	frame_context:        FrameContext,
 	frame_slot_index:     int,
 	frame_sema:           sync.Sema,
@@ -138,6 +139,7 @@ device_create :: proc(
 	device.pipeline_state = pipeline_state
 	device.clear_color = MTL.ClearColor{clear_color.r, clear_color.g, clear_color.b, clear_color.a}
 	device.bind_table = bind_table_create(device.native, fragment_program)
+	device.vertex_ring = buffer_create(Vertex2D, mtl_device)
 
 	sync.sema_post(&device.frame_sema, GPU_BUFFERS_RING_SIZE)
 	device.frame_complete_block, _ = NS.Block.createGlobal(
@@ -213,6 +215,7 @@ device_on_frame_complete :: proc "c" (user_data: rawptr) {
 }
 
 device_destroy :: proc(device: ^Device) {
+	buffer_destroy(&device.vertex_ring)
 	bind_table_destroy(device.bind_table)
 	free(device.frame_complete_block)
 

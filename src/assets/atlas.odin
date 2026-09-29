@@ -23,9 +23,17 @@ Atlas :: struct {
 }
 
 SpriteData :: struct {
-	uvs:        [gpu.VERTICES_PER_QUAD]gpu.UV,
 	atlas_rect: core.Rect,
 	uv_rect:    core.Rect,
+}
+
+@(private)
+AtlasImage :: struct {
+	name:   string,
+	pixels: [^]byte,
+	width:  i32,
+	height: i32,
+	rect:   core.Rect,
 }
 
 @(private)
@@ -65,7 +73,7 @@ atlas_load_from_files :: proc(
 	name: string,
 ) -> Error {
 	width, height, channels: i32
-	textures_data: [dynamic]gpu.TextureData
+	images: [dynamic]AtlasImage
 	rects: [dynamic]STBRP.Rect
 	sprites := make(map[string](SpriteData))
 
@@ -88,24 +96,22 @@ atlas_load_from_files :: proc(
 		}
 		append(&rects, rect)
 
-		texture_data: gpu.TextureData = {
+		image: AtlasImage = {
+			name   = strings.clone(filepath.stem(paths[i])),
 			pixels = pixels,
-			width = width,
+			width  = width,
 			height = height,
-			channels = 4,
-			in_atlas = true,
-			atlas_rect = core.Rect{w = f32(width), h = f32(height)},
-			name = strings.clone(filepath.stem(paths[i])),
 		}
-		append(&textures_data, texture_data)
+
+		append(&images, image)
 	}
 
 	defer {
 		delete(rects)
-		for texture_data in textures_data {
-			STBI.image_free(texture_data.pixels)
+		for image in images {
+			STBI.image_free(image.pixels)
 		}
-		delete(textures_data)
+		delete(images)
 	}
 
 	atlas_size: i32 = 512
@@ -118,8 +124,8 @@ atlas_load_from_files :: proc(
 	pack_result := STBRP.pack_rects(&ctx, raw_data(rects), i32(len(rects)))
 
 	if pack_result == 0 {
-		for texture_data in textures_data {
-			delete(texture_data.name)
+		for image in images {
+			delete(image.name)
 		}
 		delete(sprites)
 		log.infof("assets/atlas: failed to pack atlas '%s'", name)
@@ -128,25 +134,18 @@ atlas_load_from_files :: proc(
 		log.infof("assets/atlas: atlas '%s' packed successfully", name)
 	}
 
-	// uvs: [gpu.VERTICES_PER_QUAD]gpu.UV
-	for i in 0 ..< len(rects) {
-		textures_data[i].atlas_rect.x = f32(rects[i].x)
-		textures_data[i].atlas_rect.y = f32(rects[i].y)
-		textures_data[i].atlas_rect.w = f32(rects[i].w)
-		textures_data[i].atlas_rect.h = f32(rects[i].h)
-		textures_data[i].in_atlas = bool(rects[i].was_packed)
 
-		sprites[textures_data[i].name] = SpriteData {
-			uvs        = gpu.rect_to_uvs_atlas(
-				textures_data[i].atlas_rect,
-				{f32(atlas_size), f32(atlas_size)},
-			),
-			atlas_rect = textures_data[i].atlas_rect,
+	size := f32(atlas_size)
+	for &image, i in images {
+		image.rect = core.Rect{f32(rects[i].x), f32(rects[i].y), f32(rects[i].w), f32(rects[i].h)}
+
+		sprites[image.name] = SpriteData {
+			atlas_rect = image.rect,
 			uv_rect    = core.Rect {
-				textures_data[i].atlas_rect.x / f32(atlas_size),
-				textures_data[i].atlas_rect.y / f32(atlas_size),
-				textures_data[i].atlas_rect.w / f32(atlas_size),
-				textures_data[i].atlas_rect.h / f32(atlas_size),
+				image.rect.x / size,
+				image.rect.y / size,
+				image.rect.w / size,
+				image.rect.h / size,
 			},
 		}
 	}
@@ -162,7 +161,7 @@ atlas_load_from_files :: proc(
 		name     = name,
 	}
 
-	texture_handle, gpu_err := atlas_build_texture(bind_table, textures_data[:], atlas_data)
+	texture_handle, gpu_err := atlas_build_texture(bind_table, images[:], atlas_data)
 	atlas.texture_handle = texture_handle
 	atlas.sprites = sprites
 	atlas.size = f32(atlas_size)
@@ -177,19 +176,15 @@ atlas_load_from_files :: proc(
 @(private)
 atlas_build_texture :: proc(
 	bind_table: ^gpu.BindTable,
-	textures_data: []gpu.TextureData,
+	images: []AtlasImage,
 	atlas_data: gpu.TextureData,
 ) -> (
 	gpu.TextureHandle,
 	gpu.Error,
 ) {
-	for texture_data in textures_data {
-		if !texture_data.in_atlas {
-			continue
-		}
-
-		src := texture_data.pixels
-		rect := texture_data.atlas_rect
+	for image in images {
+		src := image.pixels
+		rect := image.rect
 		row_bytes := int(rect.w) * 4
 
 		for row in 0 ..< int(rect.h) {

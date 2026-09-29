@@ -7,7 +7,7 @@ import "ome:platform"
 
 Renderer :: struct {
 	device:  ^gpu.Device,
-	batch:   gpu.Batch,
+	batch:   Batch,
 	library: ^assets.Library,
 }
 
@@ -19,18 +19,28 @@ renderer_create :: proc(
 	renderer := new(Renderer)
 	renderer.device = device
 	renderer.library = library
-	renderer.batch = gpu.batch_create(device, window_info)
+	renderer.batch = batch_create(window_info)
+
 	return renderer
 }
 
 renderer_begin :: proc(renderer: ^Renderer) -> bool {
 	assets.library_flush(renderer.library)
-	gpu.batch_clear(&renderer.batch)
+	batch_clear(&renderer.batch)
 	return gpu.device_begin(renderer.device)
 }
 
 renderer_flush :: proc(renderer: ^Renderer) {
-	gpu.batch_flush(&renderer.batch, renderer.device)
+	view_projections: [MAX_CAMERAS]matrix[4, 4]f32
+	for camera, i in renderer.batch.cameras {
+		view_projections[i] = core.camera_get_view_projection(camera)
+	}
+	gpu.frame_submit(
+		renderer.device,
+		renderer.batch.vertices[:],
+		renderer.batch.calls[:],
+		view_projections[:],
+	)
 }
 
 renderer_present :: proc(renderer: ^Renderer) {
@@ -39,32 +49,33 @@ renderer_present :: proc(renderer: ^Renderer) {
 
 renderer_resize :: proc(renderer: ^Renderer, info: platform.WindowInfo) {
 	gpu.device_resize(renderer.device, info)
-	gpu.batch_resize(&renderer.batch, info)
+	batch_resize(&renderer.batch, info)
 }
 
 renderer_set_camera :: proc(renderer: ^Renderer, index: u32) {
-	gpu.batch_set_camera(&renderer.batch, index)
+	assert(index < MAX_CAMERAS)
+	renderer.batch.active_state.view = index
 }
 
 renderer_get_camera2d :: proc(renderer: ^Renderer, index: u32) -> ^core.Camera2D {
-	return gpu.batch_get_camera2d(&renderer.batch, index)
+	return &renderer.batch.cameras[index].(core.Camera2D)
 }
 
 renderer_set_camera2d :: proc(renderer: ^Renderer, index: u32, camera: core.Camera2D) {
-	assert(index < gpu.MAX_CAMERAS)
+	assert(index < MAX_CAMERAS)
 	renderer.batch.cameras[index] = camera
 }
 
 renderer_get_camera3d :: proc(renderer: ^Renderer, index: u32) -> ^core.Camera3D {
-	return gpu.batch_get_camera3d(&renderer.batch, index)
+	return &renderer.batch.cameras[index].(core.Camera3D)
 }
 
 renderer_set_camera3d :: proc(renderer: ^Renderer, index: u32, camera: core.Camera3D) {
-	assert(index < gpu.MAX_CAMERAS)
+	assert(index < MAX_CAMERAS)
 	renderer.batch.cameras[index] = camera
 }
 
 renderer_destroy :: proc(renderer: ^Renderer) {
-	gpu.batch_destroy(&renderer.batch)
+	batch_destroy(&renderer.batch)
 	free(renderer)
 }

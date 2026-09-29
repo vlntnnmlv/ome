@@ -18,13 +18,11 @@ Texture :: struct {
 }
 
 TextureData :: struct {
-	name:       string,
-	pixels:     [^]byte,
-	width:      i32,
-	height:     i32,
-	channels:   i32,
-	in_atlas:   bool,
-	atlas_rect: core.Rect,
+	name:     string,
+	pixels:   [^]byte,
+	width:    i32,
+	height:   i32,
+	channels: i32,
 }
 
 TextureHandle :: distinct handle_map.Handle

@@ -138,6 +138,9 @@ font_pack_size :: proc(font: ^Font, size: u32) -> Error {
 			delete(chars)
 			return .Pack
 		}
+	}
+
+	for r in rects[:n] {
 		font.dirty_rect = core.rect_union(
 			font.dirty_rect,
 			core.Rect{f32(r.x), f32(r.y), f32(r.w), f32(r.h)},
@@ -180,8 +183,6 @@ font_flush :: proc(font: ^Font, bind_table: ^gpu.BindTable) {
 				width = font.bitmap_size,
 				height = font.bitmap_size,
 				channels = 1,
-				in_atlas = false,
-				atlas_rect = core.Rect{},
 			},
 			.R8_Unorm,
 		)
