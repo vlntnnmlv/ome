@@ -180,7 +180,7 @@ vm_run_chunk :: proc(
 	err: Error,
 	message: string,
 ) {
-	cname := strings.clone_to_cstring(chunk_name)
+	cname := strings.clone_to_cstring(chunk_name, allocator)
 
 	status := LUA.L_loadbuffer(vm.state, raw_data(data), c.size_t(len(data)), cname, "t")
 	if status != .OK {

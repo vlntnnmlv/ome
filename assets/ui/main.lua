@@ -18,16 +18,16 @@ return {
 	},
 	update = function(m, dt)
 		if ome.key_down("w") then
-			m.player.y = m.player.y - 1
+			m.player.y = m.player.y - (100 * dt)
 		end
 		if ome.key_down("a") then
-			m.player.x = m.player.x - 1
+			m.player.x = m.player.x - (100 * dt)
 		end
 		if ome.key_down("s") then
-			m.player.y = m.player.y + 1
+			m.player.y = m.player.y + (100 * dt)
 		end
 		if ome.key_down("d") then
-			m.player.x = m.player.x + 1
+			m.player.x = m.player.x + (100 * dt)
 		end
 	end,
 	draw = function(m)

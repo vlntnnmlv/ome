@@ -7,10 +7,10 @@ import SDL "vendor:sdl3"
 NativeWindowHandle :: distinct rawptr
 
 WindowInfo :: struct {
-	logical_height: int,
-	logical_width:  int,
-	pixel_width:    int,
-	pixel_height:   int,
+	logical_height: f32,
+	logical_width:  f32,
+	pixel_width:    f32,
+	pixel_height:   f32,
 	pixel_ratio:    f32,
 }
 
@@ -58,10 +58,10 @@ window_refresh_info :: proc(window: ^Window) {
 	SDL.GetWindowSizeInPixels(window.native, &pixel_width, &pixel_height)
 
 	window.info = WindowInfo {
-		logical_width  = int(logical_width),
-		logical_height = int(logical_height),
-		pixel_width    = int(pixel_width),
-		pixel_height   = int(pixel_height),
+		logical_width  = f32(logical_width),
+		logical_height = f32(logical_height),
+		pixel_width    = f32(pixel_width),
+		pixel_height   = f32(pixel_height),
 		pixel_ratio    = f32(pixel_width) / f32(logical_width),
 	}
 }

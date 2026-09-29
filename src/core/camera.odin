@@ -25,9 +25,9 @@ Camera2D :: struct {
 	viewport: Rect,
 }
 
-camera2d_create :: proc(logical_size: [2]int) -> Camera2D {
-	w := f32(logical_size.x)
-	h := f32(logical_size.y)
+camera2d_create :: proc(logical_size: [2]f32) -> Camera2D {
+	w := logical_size.x
+	h := logical_size.y
 
 	return Camera2D{position = {w * 0.5, h * 0.5}, zoom = 1, rotation = 0, viewport = {0, 0, w, h}}
 }
@@ -40,6 +40,17 @@ camera_get_view_projection :: proc(camera: Camera) -> matrix[4, 4]f32 {
 		return camera3d_get_view_projection(c)
 	}
 	return 1
+}
+
+camera_set_viewport_size :: proc(camera: ^Camera, viewport_size: [2]f32) {
+	switch &c in camera {
+	case Camera2D:
+		c.viewport.x = viewport_size.x
+		c.viewport.y = viewport_size.y
+	case Camera3D:
+		c.viewport.x = viewport_size.x
+		c.viewport.y = viewport_size.y
+	}
 }
 
 @(private = "file")

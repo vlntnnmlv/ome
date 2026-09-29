@@ -123,22 +123,22 @@ texture_by_handle :: proc(
 ) {
 	positions: [dynamic]gpu.Position
 	uvs: [dynamic]gpu.UV
+	offset := core.rect_offset_flip(slice_offset, flip)
 
-	if slice_offset != core.ZERO_RECT_OFFSET {
+	if offset != core.ZERO_RECT_OFFSET {
 		tex_size, ok := gpu.texture_size(renderer.device.bind_table, texture_handle)
 		if !ok {
 			return
 		}
 
-		positions = gpu.rect_to_vertices_positions_nine_slice(rect, slice_offset)
-		uvs = gpu.rect_offset_to_uvs_nine_slice(slice_offset, tex_size.x, tex_size.y)
+		positions = gpu.rect_to_vertices_positions_nine_slice(rect, offset)
+		uvs = gpu.rect_offset_to_uvs_nine_slice(offset, tex_size.x, tex_size.y)
 	} else {
 		positions = gpu.rect_to_vertices_positions(rect)
 		uvs = gpu.rect_to_uvs({0, 0, 1, 1})
 	}
 
 	gpu.uvs_mirror(uvs[:], core.UNIT_RECT, flip)
-
 	gpu.batch_add_texture(&renderer.batch, texture_handle, positions[:], uvs[:], color)
 }
 
@@ -172,6 +172,7 @@ texture_by_atlas_name :: proc(
 
 	positions: [dynamic]gpu.Position
 	uvs: []gpu.UV
+	offset := core.rect_offset_flip(slice_offset, flip)
 
 	sprite, found := atlas.sprites[sprite_name]
 	if !found {
@@ -179,21 +180,23 @@ texture_by_atlas_name :: proc(
 		return
 	}
 
-	if slice_offset != core.ZERO_RECT_OFFSET {
-		positions = gpu.rect_to_vertices_positions_nine_slice(rect, slice_offset)
+	if offset != core.ZERO_RECT_OFFSET {
+		positions = gpu.rect_to_vertices_positions_nine_slice(rect, offset)
 		uvs = gpu.rect_offset_to_uvs_nine_slice_atlas(
-			slice_offset,
+			offset,
 			sprite.uv_rect,
 			{atlas.size, atlas.size},
 		)[:]
 	} else {
 		positions = gpu.rect_to_vertices_positions(rect)
 		uvs = sprite.uvs
+		if flip != {} {
+			uvs = slice.clone(sprite.uvs, context.temp_allocator)
+		}
 	}
 
-	final_uvs := slice.clone(sprite.uvs, context.temp_allocator)
-	gpu.uvs_mirror(final_uvs[:], sprite.uv_rect, flip)
-	gpu.batch_add_texture(&renderer.batch, atlas.texture_handle, positions[:], final_uvs, color)
+	gpu.uvs_mirror(uvs, sprite.uv_rect, flip)
+	gpu.batch_add_texture(&renderer.batch, atlas.texture_handle, positions[:], uvs, color)
 }
 
 @(private = "file")

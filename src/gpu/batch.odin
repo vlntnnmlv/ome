@@ -73,7 +73,7 @@ Batch :: struct {
 	render_calls: [dynamic]RenderCall,
 	active_state: RenderState,
 	cameras:      [MAX_CAMERAS]core.Camera,
-	logical_size: [2]int,
+	logical_size: [2]f32,
 }
 
 batch_clear :: proc(batch: ^Batch) {
@@ -155,16 +155,8 @@ batch_create :: proc(device: ^Device, window_info: platform.WindowInfo) -> Batch
 batch_resize :: proc(batch: ^Batch, window_info: platform.WindowInfo) {
 	batch.logical_size = {window_info.logical_width, window_info.logical_height}
 	for i in 0 ..< MAX_CAMERAS {
-		switch _ in batch.cameras[i] {
-		case core.Camera2D:
-			batch.cameras[i] = core.camera2d_create(batch.logical_size)
-		case core.Camera3D:
-			c := &batch.cameras[i].(core.Camera3D)
-			c.viewport.w = f32(window_info.logical_width)
-			c.viewport.h = f32(window_info.logical_height)
-		}
+		core.camera_set_viewport_size(&batch.cameras[i], batch.logical_size)
 	}
-
 }
 
 batch_destroy :: proc(batch: ^Batch) {
