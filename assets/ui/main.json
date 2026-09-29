@@ -1,4 +1,16 @@
 {
 	"name": "root",
-	"rect": [0, 0, 1080, 720]
+	"rect": [0, 0, 1080, 720],
+	"children": [
+		{
+			"name": "flipped_img",
+			"rect": [500, 500, 100, 100],
+			"kind": "image",
+			"atlas": "player_atlas",
+			"sprite": "jungle_dweller",
+			"color": [255, 255, 255, 255],
+			"flip": "",
+			"bind": [{ "flip": "flip" }]
+		}
+	]
 }

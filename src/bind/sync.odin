@@ -1,7 +1,9 @@
 package omebind
 
+import "core:hash"
 import "core:log"
 import "core:os"
+import "core:time"
 
 import "ome:script"
 import "ome:ui"
@@ -12,22 +14,28 @@ binder_view_sync_json :: proc(binder: ^Binder, view: ^View) {
 		return
 	}
 
-	mtime, mtime_err := os.last_write_time_by_name(view.json_path)
-	if mtime_err != nil || mtime == view.json_mtime {
+	data, new_hash, changed := file_read_if_changed(
+		view.json_path,
+		&view.json_mtime,
+		view.json_hash,
+		false,
+	)
+
+	if !changed {
 		return
 	}
-	view.json_mtime = mtime
 
 	scene := ui.stage_get_scene(binder.stage, view.scene_handle)
 	if scene == nil {
 		return
 	}
 
-	desc, ok := binder_read_view_json(binder, view.json_path)
+	desc, ok := ui.panel_description_from_json(binder.library, data, context.temp_allocator)
 	if !ok {
 		log.warnf("bind/sync: %s failed to load, keeping previous tree", view.json_path)
 		return
 	}
+	view.json_hash = new_hash
 
 	if view.root_handle != ui.NO_PANEL {
 		ui.scene_remove_panel(scene, view.root_handle)
@@ -42,13 +50,17 @@ binder_view_sync_lua :: proc(binder: ^Binder, view: ^View) {
 		return
 	}
 
-	mtime, mtime_err := os.last_write_time_by_name(view.lua_path)
-	if mtime_err != nil || mtime == view.lua_mtime {
+	data, new_hash, changed := file_read_if_changed(
+		view.lua_path,
+		&view.lua_mtime,
+		view.lua_hash,
+		view.broken,
+	)
+	if !changed {
 		return
 	}
-	view.lua_mtime = mtime
 
-	module, ok := script.vm_load_module(binder.vm, view.lua_path)
+	module, ok := script.vm_load_module(binder.vm, data, view.lua_path)
 	if !ok {
 		log.warnf("bind/sync: %s failed to load, keeping previous module", view.lua_path)
 		return
@@ -56,6 +68,7 @@ binder_view_sync_lua :: proc(binder: ^Binder, view: ^View) {
 
 	script.vm_unref(binder.vm, view.module_ref)
 	view.module_ref = module
+	view.lua_hash = new_hash
 	view.broken = false
 	log.infof("bind/sync: loaded %s", view.lua_path)
 }
@@ -77,11 +90,30 @@ binder_call_hook :: proc(binder: ^Binder, view: ^View, name: cstring, args: ..f6
 }
 
 @(private)
-binder_read_view_json :: proc(binder: ^Binder, path: string) -> (ui.PanelDescription, bool) {
-	data, read_err := os.read_entire_file_from_path(path, context.temp_allocator)
+file_read_if_changed :: proc(
+	path: string,
+	mtime: ^time.Time,
+	last_hash: u64,
+	force: bool,
+) -> (
+	data: []byte,
+	new_hash: u64,
+	changed: bool,
+) {
+	new_mtime, mtime_err := os.last_write_time_by_name(path)
+	if mtime_err != nil || new_mtime == mtime^ {
+		return
+	}
+	mtime^ = new_mtime
+
+	file_data, read_err := os.read_entire_file_from_path(path, context.temp_allocator)
 	if read_err != nil {
 		log.errorf("bind/sync: can't read %s: %v", path, read_err)
-		return {}, false
+		return
 	}
-	return ui.panel_description_from_json(binder.library, data, context.temp_allocator)
+
+	data = file_data
+	new_hash = hash.fnv64a(data)
+	changed = force || new_hash != last_hash
+	return
 }

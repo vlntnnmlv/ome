@@ -171,6 +171,30 @@ vm_run_file :: proc(
 }
 
 @(private)
+vm_run_chunk :: proc(
+	vm: ^VM,
+	data: []byte,
+	chunk_name: string,
+	allocator: mem.Allocator = context.allocator,
+) -> (
+	err: Error,
+	message: string,
+) {
+	cname := strings.clone_to_cstring(chunk_name)
+
+	status := LUA.L_loadbuffer(vm.state, raw_data(data), c.size_t(len(data)), cname, "t")
+	if status != .OK {
+		return status_to_error(status), vm_pop_message(vm, allocator)
+	}
+
+	if rc := LUA.pcall(vm.state, 0, 1, 0); rc != 0 {
+		return status_to_error(LUA.Status(rc)), vm_pop_message(vm, allocator)
+	}
+
+	return .None, ""
+}
+
+@(private)
 vm_clear_stack :: proc(vm: ^VM) {
 	LUA.settop(vm.state, 0)
 }

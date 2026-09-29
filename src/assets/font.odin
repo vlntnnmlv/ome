@@ -91,7 +91,7 @@ font_load :: proc(font: ^Font, path: string, sizes: []u32 = {}) -> Error {
 		   1,
 		   nil,
 	   ) ==
-	   0 {
+	   false {
 		log.errorf("assets/font: failed to pack font at '%s'", path)
 		return .Pack
 	}

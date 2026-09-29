@@ -7,8 +7,9 @@ import "core:strings"
 
 import LUA "vendor:lua/5.4"
 
-vm_load_module :: proc(vm: ^VM, path: string) -> (Ref, bool) {
-	if err, msg := vm_run_file(vm, path); err != nil {
+vm_load_module :: proc(vm: ^VM, data: []byte, path: string) -> (Ref, bool) {
+	chunk_name := fmt.tprintf("@%s", path)
+	if err, msg := vm_run_chunk(vm, data, chunk_name); err != nil {
 		log.errorf("script: %s: %v: %s", path, err, msg)
 		return NO_REF, false
 	}

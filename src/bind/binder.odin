@@ -22,6 +22,8 @@ Binder :: struct {
 View :: struct {
 	json_path:     string,
 	lua_path:      string,
+	json_hash:     u64,
+	lua_hash:      u64,
 	scene_handle:  ui.SceneHandle,
 	parent_handle: ui.PanelHandle,
 	root_handle:   ui.PanelHandle,

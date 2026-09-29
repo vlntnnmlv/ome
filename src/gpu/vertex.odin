@@ -117,16 +117,10 @@ rect_offset_to_uvs_nine_slice :: proc(offset: core.RectOffset, width, height: f3
 
 rect_offset_to_uvs_nine_slice_atlas :: proc(
 	offset: core.RectOffset,
-	rect: core.Rect,
+	uv_rect: core.Rect,
 	atlas_size: [2]f32,
 	allocator: mem.Allocator = context.temp_allocator,
 ) -> [dynamic]UV {
-	uv_rect := core.Rect {
-		rect.x / atlas_size.x,
-		rect.y / atlas_size.y,
-		rect.w / atlas_size.x,
-		rect.h / atlas_size.y,
-	}
 	relative_offset := core.RectOffset {
 		offset.left / atlas_size.x,
 		offset.right / atlas_size.x,
@@ -140,6 +134,15 @@ rect_offset_to_uvs_nine_slice_atlas :: proc(
 		copy(uvs[i * VERTICES_PER_QUAD:], rect_uvs[:])
 	}
 	return uvs
+}
+
+// --- UVs to ... ---
+uvs_mirror :: proc(uvs: []UV, bounds: core.Rect, flip: core.Flip) {
+	c := UV{2 * bounds.x + bounds.w, 2 * bounds.y + bounds.h}
+	for &uv in uvs {
+		if .X in flip {uv.x = c.x - uv.x}
+		if .Y in flip {uv.y = c.y - uv.y}
+	}
 }
 
 // --- Point to ... ---
