@@ -135,7 +135,7 @@ main :: proc() {
 
 	bind.binder_add_view(
 		binder,
-		"assets/ui/main.lua",
+		bind.NO_LUA,
 		"assets/ui/main.json",
 		scene_handle,
 		scene.root_handle,

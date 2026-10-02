@@ -49,6 +49,9 @@ binder_create :: proc(
 	return binder
 }
 
+NO_LUA: string : ""
+NO_JSON: string : ""
+
 binder_add_view :: proc(
 	binder: ^Binder,
 	lua_path: string,
