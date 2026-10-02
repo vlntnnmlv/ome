@@ -102,7 +102,7 @@ main :: proc() {
 
 	// --- UI ---
 	screen_rect := core.Rect{0, 0, width, height}
-	stage := ui.stage_create()
+	stage := ui.stage_create(library)
 	defer ui.stage_destroy(stage)
 
 	app.engine_add_event_handler(engine, stage, ui.stage_handle_event)

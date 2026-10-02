@@ -41,14 +41,21 @@ panel_description_from_object :: proc(
 ) {
 	name, _ := json_string(obj, "name", "unnamed")
 
+	r: [4]f32
+	if !json_numbers(obj, "rect", r[:]) {
+		log.warnf("ui/json: panel '%s' has no valid rect", name)
+		return {}, false
+	}
+
 	spec, spec_ok := spec_from_object(library, obj)
 	if !spec_ok {
 		return {}, false
 	}
 
 	description = PanelDescription {
-		name     = name,
-		spec     = spec,
+		name = name,
+		spec = spec,
+		layout = {width = Fixed(r[2]), height = Fixed(r[3])},
 		children = make([dynamic]PanelDescription, allocator),
 		bindings = make([dynamic]Binding, allocator),
 	}

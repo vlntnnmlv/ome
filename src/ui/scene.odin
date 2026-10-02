@@ -2,6 +2,7 @@ package omeui
 
 import "core:mem"
 import "core:strings"
+import "ome:assets"
 
 import "ome:core"
 import "ome:handle_map"
@@ -24,6 +25,7 @@ Scene :: struct {
 	following_window: bool,
 	debug:            bool,
 	layout_dirty:     bool,
+	library:          ^assets.Library,
 }
 
 Click :: struct {
@@ -37,6 +39,7 @@ Click :: struct {
 scene_create :: proc(
 	name: string,
 	rect: core.Rect,
+	library: ^assets.Library,
 	allocator: mem.Allocator = context.allocator,
 ) -> Scene {
 	panels, err := handle_map.make(Panel, PanelHandle, allocator)
@@ -48,15 +51,23 @@ scene_create :: proc(
 		panels           = panels,
 		clicks           = make([dynamic]Click, allocator),
 		following_window = true,
+		library          = library,
 	}
 
-	root_panel := panel_create(NO_PANEL, "root", rect, PanelSpec{}, allocator)
+	root_panel := panel_create(
+		NO_PANEL,
+		"root",
+		PanelSpec{},
+		{width = Fixed(rect.w), height = Fixed(rect.h)},
+		allocator,
+	)
 	root_panel.ignore_events = true
 
 	root_handle: PanelHandle
 	root_handle, err = handle_map.add(&scene.panels, root_panel)
 	ensure(err == nil)
 
+	scene.layout_dirty = true
 	scene.root_handle = root_handle
 	scene.name = strings.clone(name, allocator)
 
@@ -67,20 +78,21 @@ scene_add_panel :: proc(
 	scene: ^Scene,
 	parent_handle: PanelHandle,
 	name: string,
-	rect: core.Rect,
 	spec: Spec,
+	layout: Layout,
 ) -> PanelHandle {
 	if parent_handle == NO_PANEL {
 		return NO_PANEL
 	}
 
-	panel := panel_create(parent_handle, name, rect, spec, scene.allocator)
+	panel := panel_create(parent_handle, name, spec, layout, scene.allocator)
 	panel_handle, err := handle_map.add(&scene.panels, panel)
 	ensure(err == nil)
 
-
 	parent := handle_map.get(scene.panels, parent_handle)
 	append(&parent.child_handles, panel_handle)
+
+	scene.layout_dirty = true
 	return panel_handle
 }
 
@@ -125,14 +137,21 @@ scene_remove_panel :: proc(scene: ^Scene, handle: PanelHandle) {
 
 	scene_clear_input(scene)
 	clear(&scene.clicks)
+	scene.layout_dirty = true
 }
 
 scene_handle_event :: proc(scene: ^Scene, event: platform.Event) -> bool {
+	scene_update_layout(scene)
+
 	#partial switch e in event {
 	case platform.ResizeEvent:
 		if scene.following_window {
 			root := scene_get_panel(scene, scene.root_handle)
-			root.rect = core.Rect{0, 0, f32(e.info.logical_width), f32(e.info.logical_height)}
+			root.layout = {
+				width  = Fixed(f32(e.info.logical_width)),
+				height = Fixed(f32(e.info.logical_height)),
+			}
+			scene.layout_dirty = true
 		}
 		return false
 	case platform.MouseMoveEvent:
@@ -247,6 +266,8 @@ scene_clear_hover :: proc(scene: ^Scene) {
 }
 
 scene_render :: proc(scene: ^Scene, renderer: ^render.Renderer) {
+	scene_update_layout(scene)
+
 	panel_render(scene, scene.root_handle, renderer)
 }
 

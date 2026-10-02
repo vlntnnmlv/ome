@@ -32,8 +32,8 @@ PanelDescription :: struct {
 	uuid:     string,
 	handle:   PanelHandle,
 	name:     string,
-	rect:     core.Rect,
 	spec:     Spec,
+	layout:   Layout,
 	children: [dynamic]PanelDescription,
 	bindings: [dynamic]Binding,
 }
@@ -41,16 +41,16 @@ PanelDescription :: struct {
 panel_create :: proc(
 	parent_handle: PanelHandle,
 	name: string,
-	rect: core.Rect,
 	spec: Spec,
+	layout: Layout,
 	allocator: mem.Allocator = context.allocator,
 ) -> Panel {
 	return panel_create_raw(
 		parent_handle = parent_handle,
 		uuid = core.uuid_create(allocator),
 		name = strings.clone(name, allocator),
-		rect = rect,
 		spec = spec_clone(spec, allocator),
+		layout = layout,
 		allocator = allocator,
 	)
 }
@@ -60,8 +60,8 @@ panel_create_raw :: proc(
 	parent_handle: PanelHandle,
 	uuid: string,
 	name: string,
-	rect: core.Rect,
 	spec: Spec,
+	layout: Layout,
 	allocator: mem.Allocator = context.allocator,
 ) -> Panel {
 	return Panel {
@@ -70,7 +70,7 @@ panel_create_raw :: proc(
 		child_handles = make([dynamic]PanelHandle, allocator),
 		bindings = make([dynamic]Binding, allocator),
 		name = name,
-		rect = rect,
+		layout = layout,
 		spec = spec,
 	}
 }
@@ -85,8 +85,8 @@ panel_to_description :: proc(
 		panel.uuid,
 		handle,
 		panel.name,
-		panel.rect,
 		panel.spec,
+		panel.layout,
 		make([dynamic]PanelDescription, allocator),
 		make([dynamic]Binding, allocator),
 	}
@@ -121,8 +121,8 @@ panel_from_description :: proc(
 		parent_handle,
 		uuid,
 		strings.clone(panel_description.name, scene.allocator),
-		panel_description.rect,
 		spec_clone(panel_description.spec, scene.allocator),
+		panel_description.layout,
 		scene.allocator,
 	)
 
@@ -147,6 +147,7 @@ panel_from_description :: proc(
 		panel_from_description(scene, panel_handle, child)
 	}
 
+	scene.layout_dirty = true
 	return panel_handle
 }
 
