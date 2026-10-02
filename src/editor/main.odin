@@ -173,7 +173,7 @@ main :: proc() {
 			fmt.tprint(engine.clock.fps),
 			font_handle,
 			64,
-			{0, screen_rect.h, 500, 500},
+			{0, screen_rect.h / 2, 500, 500},
 			core.Color{0, 0, 255, 255},
 		)
 	}

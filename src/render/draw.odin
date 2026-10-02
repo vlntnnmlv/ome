@@ -78,11 +78,12 @@ text :: proc(
 ) {
 	font := assets.library_get_font(renderer.library, font_handle)
 
-	wanted_font_size := assets.font_text_fit(font, text, font_size, rect)
-	assets.font_ensure_size(font, wanted_font_size)
-	real_font_size := assets.font_nearest_size(font, wanted_font_size)
+	// wanted_font_size := assets.font_text_fit(font, text, font_size, rect)
+	assets.font_ensure_size(font, font_size)
+	real_font_size := assets.font_nearest_size(font, font_size)
+	ascent := assets.font_ascent(font, real_font_size)
 
-	it := assets.font_make_glyphs_iterator(font, text, real_font_size, {rect.x, rect.y})
+	it := assets.font_make_glyphs_iterator(font, text, real_font_size, {rect.x, rect.y + ascent})
 	for glyph in assets.font_iter_glyphs(&it) {
 		positions := rect_to_vertices_positions(glyph.rect)
 		uvs := rect_to_uvs(glyph.uv_rect)
