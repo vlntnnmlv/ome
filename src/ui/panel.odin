@@ -23,6 +23,9 @@ Panel :: struct {
 	ignore_events: bool,
 	hovered:       bool,
 	pressed:       bool,
+	// layout
+	layout:        Layout,
+	desired:       [2]f32, // only layout can change this
 }
 
 PanelDescription :: struct {

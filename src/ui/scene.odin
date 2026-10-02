@@ -23,6 +23,7 @@ Scene :: struct {
 	modal:            bool,
 	following_window: bool,
 	debug:            bool,
+	layout_dirty:     bool,
 }
 
 Click :: struct {
