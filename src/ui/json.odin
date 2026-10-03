@@ -41,10 +41,15 @@ panel_description_from_object :: proc(
 ) {
 	name, _ := json_string(obj, "name", "unnamed")
 
-	r: [4]f32
-	if !json_numbers(obj, "rect", r[:]) {
-		log.warnf("ui/json: panel '%s' has no valid rect", name)
-		return {}, false
+	// r: [4]f32
+	// if !json_numbers(obj, "rect", r[:]) {
+	// 	log.warnf("ui/json: panel '%s' has no valid rect", name)
+	// 	return {}, false
+	// }
+
+	layout: Layout = {}
+	if layout_object, has_layout := obj["layout"].(json.Object); has_layout {
+		layout = layout_from_object(layout_object, name)
 	}
 
 	spec, spec_ok := spec_from_object(library, obj)
@@ -53,9 +58,9 @@ panel_description_from_object :: proc(
 	}
 
 	description = PanelDescription {
-		name = name,
-		spec = spec,
-		layout = {width = Fixed(r[2]), height = Fixed(r[3])},
+		name     = name,
+		spec     = spec,
+		layout   = layout,
 		children = make([dynamic]PanelDescription, allocator),
 		bindings = make([dynamic]Binding, allocator),
 	}
@@ -99,6 +104,111 @@ panel_description_from_object :: proc(
 	}
 
 	return description, true
+}
+
+@(private)
+layout_from_object :: proc(obj: json.Object, name: string) -> Layout {
+	layout := Layout{}
+
+	width := json_sizing_from_object(obj, "width", name)
+	height := json_sizing_from_object(obj, "height", name)
+
+	min_s: [2]f32
+	_ = json_numbers(obj, "min", min_s[:])
+
+	max_s: [2]f32
+	_ = json_numbers(obj, "max", max_s[:])
+
+	align_string, has_align := json_string(obj, "align")
+	align := Align.Start
+	if has_align {
+		switch align_string {
+		case "center":
+			align = .Center
+		case "end":
+			align = .End
+		}
+	}
+
+	direction_string, has_direction := json_string(obj, "direction")
+	direction := core.Axis.X
+	if has_direction {
+		switch direction_string {
+		case "vertical":
+			direction = .Y
+		case "horizontal":
+			direction = .X
+		}
+	}
+
+	content_align_string, has_content_align := json_string(obj, "content_align")
+	content_align := Align.Start
+	if has_content_align {
+		switch content_align_string {
+		case "center":
+			content_align = .Center
+		case "end":
+			content_align = .End
+		}
+	}
+
+	padding: [4]f32
+	_ = json_numbers(obj, "padding", padding[:])
+
+	margin: [4]f32
+	_ = json_numbers(obj, "margin", padding[:])
+
+	spacing: f32 = json_number(obj, "spacing")
+
+	layout.size = {
+		.X = width,
+		.Y = height,
+	}
+	layout.min = {
+		.X = min_s.x,
+		.Y = min_s.y,
+	}
+	layout.max = {
+		.X = max_s.x,
+		.Y = max_s.y,
+	}
+	layout.align = align
+	layout.direction = direction
+	layout.padding = core.RectOffset{padding[0], padding[1], padding[2], padding[3]}
+	layout.margin = core.RectOffset{margin[0], margin[1], margin[2], margin[3]}
+	layout.spacing = spacing
+	layout.content_align = content_align
+
+	return layout
+}
+
+@(private)
+json_sizing_from_object :: proc(obj: json.Object, key, name: string) -> Sizing {
+	value, found := obj[key]
+	if !found {
+		return Fit{}
+	}
+
+	#partial switch sizing in value {
+	case json.Float:
+		return Fixed(f32(sizing))
+	case json.Integer:
+		return Fixed(f32(sizing))
+	case json.String:
+		switch sizing {
+		case "fit":
+			return Fit{}
+		case "fill":
+			return Fill(1)
+		}
+	case json.Object:
+		if w, ok := sizing["fill"].(json.Float); ok {
+			return Fill(f32(w))
+		}
+	}
+
+	log.warnf("ui/json: panel '%s': invalid '%s', using fit", name, key)
+	return Fit{}
 }
 
 @(private)

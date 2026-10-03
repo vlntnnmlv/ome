@@ -8,12 +8,12 @@ Rect :: struct {
 	x, y, w, h: f32,
 }
 
-FlipAxis :: enum u8 {
+Axis :: enum u8 {
 	X,
 	Y,
 }
 
-Flip :: bit_set[FlipAxis;u8]
+Flip :: bit_set[Axis;u8]
 
 UNIT_RECT :: Rect{0, 0, 1, 1}
 ZERO_RECT :: Rect{0, 0, 0, 0}
@@ -67,6 +67,26 @@ rect_union :: proc(a, b: Rect) -> Rect {
 	return Rect{x0, y0, x1 - x0, y1 - y0}
 }
 
+rect_position :: proc(rect: Rect) -> [Axis]f32 {
+	return {.X = rect.x, .Y = rect.y}
+}
+
+rect_size :: proc(rect: Rect) -> [Axis]f32 {
+	return {.X = rect.w, .Y = rect.h}
+}
+
+rect_from :: proc(position, size: [Axis]f32) -> Rect {
+	return {x = position[.X], y = position[.Y], w = size[.X], h = size[.Y]}
+}
+
+rect_offset_total :: proc(offset: RectOffset) -> [Axis]f32 {
+	return {.X = offset.left + offset.right, .Y = offset.top + offset.bottom}
+}
+
+rect_offset_start :: proc(offset: RectOffset) -> [Axis]f32 {
+	return {.X = offset.left, .Y = offset.top}
+}
+
 rect_offset_flip :: proc(offset: RectOffset, flip: Flip) -> RectOffset {
 	res := RectOffset(offset)
 
@@ -74,4 +94,8 @@ rect_offset_flip :: proc(offset: RectOffset, flip: Flip) -> RectOffset {
 	if .Y in flip {c := res.top; res.top = res.bottom; res.bottom = c}
 
 	return res
+}
+
+axis_cross :: proc(axis: Axis) -> Axis {
+	return .X if axis == .Y else .Y
 }

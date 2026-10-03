@@ -58,7 +58,7 @@ scene_create :: proc(
 		NO_PANEL,
 		"root",
 		PanelSpec{},
-		{width = Fixed(rect.w), height = Fixed(rect.h)},
+		{size = {.X = Fixed(rect.w), .Y = Fixed(rect.h)}},
 		allocator,
 	)
 	root_panel.ignore_events = true
@@ -147,9 +147,9 @@ scene_handle_event :: proc(scene: ^Scene, event: platform.Event) -> bool {
 	case platform.ResizeEvent:
 		if scene.following_window {
 			root := scene_get_panel(scene, scene.root_handle)
-			root.layout = {
-				width  = Fixed(f32(e.info.logical_width)),
-				height = Fixed(f32(e.info.logical_height)),
+			root.layout.size = {
+				.X = Fixed(f32(e.info.logical_width)),
+				.Y = Fixed(f32(e.info.logical_height)),
 			}
 			scene.layout_dirty = true
 		}

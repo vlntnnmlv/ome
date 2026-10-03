@@ -1,17 +1,52 @@
 {
 	"name": "root",
-	"rect": [0, 0, 1080, 720],
+	"layout": { "width": "fill", "height": "fill" },
 	"children": [
 		{
-			"name": "flipped_img",
-			"rect": [500, 500, 100, 100],
-			"kind": "image",
-			"atlas": "ui_atlas",
-			"sprite": "frame",
+			"name": "stack",
+			"kind": "panel",
 			"color": [255, 255, 255, 255],
-			"slice": [8, 8, 8, 8],
-			"flip": "",
-			"bind": { "flip": "flip" }
+			"layout": {
+				"width": 100,
+				"height": "fill",
+				"align": "center",
+				"direction": "vertical",
+				"padding": [8, 8, 8, 8],
+				"spacing": 16,
+				"content_align": "center"
+			},
+			"children": [
+				{
+					"name": "img1",
+					"kind": "image",
+					"atlas": "ui_atlas",
+					"sprite": "frame",
+					"color": [255, 255, 255, 255],
+					"slice": [8, 8, 8, 8],
+					"flip": "",
+					"layout": {
+						"width": "fit",
+						"height": "fit",
+						"padding": [8, 8, 8, 8],
+						"align": "center"
+					}
+				},
+				{
+					"name": "img2",
+					"kind": "image",
+					"atlas": "ui_atlas",
+					"sprite": "frame",
+					"color": [255, 255, 255, 255],
+					"slice": [8, 8, 8, 8],
+					"flip": "",
+					"layout": {
+						"width": "fit",
+						"height": "fit",
+						"padding": [8, 8, 8, 8],
+						"align": "center"
+					}
+				}
+			]
 		}
 	]
 }

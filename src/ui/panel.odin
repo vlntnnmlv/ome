@@ -25,7 +25,7 @@ Panel :: struct {
 	pressed:       bool,
 	// layout
 	layout:        Layout,
-	desired:       [2]f32, // only layout can change this
+	desired:       [core.Axis]f32, // only layout can change this
 }
 
 PanelDescription :: struct {
@@ -184,9 +184,21 @@ panel_set_text :: proc(scene: ^Scene, handle: PanelHandle, text: string) -> bool
 		cloned := strings.clone(text, scene.allocator)
 		delete(s.text, scene.allocator)
 		s.text = cloned
+		scene.layout_dirty = true
 		return true
 	}
 	return false
+}
+
+panel_set_layout :: proc(scene: ^Scene, handle: PanelHandle, layout: Layout) -> bool {
+	panel := scene_get_panel(scene, handle)
+	if panel == nil || panel.layout == layout {
+		return false
+	}
+
+	panel.layout = layout
+	scene.layout_dirty = true
+	return true
 }
 
 panel_hit_test :: proc(scene: ^Scene, handle: PanelHandle, position: [2]f32) -> PanelHandle {

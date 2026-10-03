@@ -108,6 +108,21 @@ main :: proc() {
 	app.engine_add_event_handler(engine, stage, ui.stage_handle_event)
 
 	scene_handle := ui.stage_add_scene(stage, "main", screen_rect)
+	scene := ui.stage_get_scene(stage, scene_handle)
+	scene.debug = true
+
+	ui.scene_add_panel(
+		scene,
+		scene.root_handle,
+		"text",
+		ui.TextSpec {
+			color = core.WHITE,
+			text = "Hello!",
+			font_handle = font_handle,
+			font_size = 32,
+		},
+		ui.Layout{size = {.X = ui.Fixed(400), .Y = ui.Fixed(80)}},
+	)
 	ui.stage_show_scene(stage, scene_handle)
 	// ---------
 
@@ -117,9 +132,6 @@ main :: proc() {
 		return
 	}
 	defer script.vm_destroy(vm)
-
-	scene := ui.stage_get_scene(stage, scene_handle)
-	scene.debug = true
 	// ---------
 
 	// --- API ---
