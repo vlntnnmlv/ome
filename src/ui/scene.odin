@@ -24,8 +24,9 @@ Scene :: struct {
 	modal:            bool,
 	following_window: bool,
 	debug:            bool,
-	layout_dirty:     bool,
 	library:          ^assets.Library,
+	layout_dirty:     bool,
+	layout_tree:      LayoutTree,
 }
 
 Click :: struct {
@@ -46,12 +47,13 @@ scene_create :: proc(
 	ensure(err == nil)
 
 	scene: Scene = {
-		allocator        = allocator,
-		uuid             = core.uuid_create(allocator),
-		panels           = panels,
-		clicks           = make([dynamic]Click, allocator),
+		allocator = allocator,
+		uuid = core.uuid_create(allocator),
+		panels = panels,
+		clicks = make([dynamic]Click, allocator),
 		following_window = true,
-		library          = library,
+		library = library,
+		layout_tree = {nodes = make([dynamic]LayoutNode, allocator)},
 	}
 
 	root_panel := panel_create(
@@ -275,6 +277,7 @@ scene_destroy :: proc(scene: ^Scene) {
 	panel_destroy(scene, handle_map.get(scene.panels, scene.root_handle))
 
 	delete(scene.clicks)
+	delete(scene.layout_tree.nodes)
 	delete(scene.name, scene.allocator)
 	handle_map.delete(&scene.panels)
 	delete(scene.uuid, scene.allocator)

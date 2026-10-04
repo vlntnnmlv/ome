@@ -119,25 +119,18 @@ layout_from_object :: proc(obj: json.Object, name: string) -> Layout {
 	max_s: [2]f32
 	_ = json_numbers(obj, "max", max_s[:])
 
-	align_string, has_align := json_string(obj, "align")
-	align := Align.Start
-	if has_align {
-		switch align_string {
-		case "center":
-			align = .Center
-		case "end":
-			align = .End
-		}
-	}
+	align := json_align(obj, "align", name)
 
-	direction_string, has_direction := json_string(obj, "direction")
-	direction := core.Axis.X
-	if has_direction {
-		switch direction_string {
-		case "vertical":
-			direction = .Y
-		case "horizontal":
-			direction = .X
+	flow_string, has_flow := json_string(obj, "direction")
+	flow: Flow
+	if has_flow {
+		switch flow_string {
+		case "row":
+			flow = .Row
+		case "column":
+			flow = .Column
+		case "overlay":
+			flow = .Overlay
 		}
 	}
 
@@ -156,7 +149,7 @@ layout_from_object :: proc(obj: json.Object, name: string) -> Layout {
 	_ = json_numbers(obj, "padding", padding[:])
 
 	margin: [4]f32
-	_ = json_numbers(obj, "margin", padding[:])
+	_ = json_numbers(obj, "margin", margin[:])
 
 	spacing: f32 = json_number(obj, "spacing")
 
@@ -173,7 +166,7 @@ layout_from_object :: proc(obj: json.Object, name: string) -> Layout {
 		.Y = max_s.y,
 	}
 	layout.align = align
-	layout.direction = direction
+	layout.flow = flow
 	layout.padding = core.RectOffset{padding[0], padding[1], padding[2], padding[3]}
 	layout.margin = core.RectOffset{margin[0], margin[1], margin[2], margin[3]}
 	layout.spacing = spacing
@@ -310,6 +303,41 @@ json_string :: proc(obj: json.Object, key: string, fallback := "") -> (string, b
 		return string(str), true
 	}
 	return fallback, false
+}
+
+json_align :: proc(obj: json.Object, key, name: string) -> (align: [core.Axis]Align) {
+	#partial switch value in obj[key] {
+	case json.String:
+		a := json_align_value(string(value), key, name)
+		align = {
+			.X = a,
+			.Y = a,
+		}
+	case json.Array:
+		if len(value) != 2 {
+			log.warnf("ui/json: panel '%s': '%s' array needs 2 values", name, key)
+			return
+		}
+		for axis in core.Axis {
+			if s, is_string := value[int(axis)].(json.String); is_string {
+				align[axis] = json_align_value(string(s), key, name)
+			}
+		}
+	}
+	return
+}
+
+json_align_value :: proc(s, key, name: string) -> Align {
+	switch s {
+	case "start":
+		return .Start
+	case "center":
+		return .Center
+	case "end":
+		return .End
+	}
+	log.warnf("ui/json: panel '%s': unknown %s '%s', using start", name, key, s)
+	return .Start
 }
 
 @(private = "file")
