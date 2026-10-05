@@ -1,6 +1,9 @@
 package omeui
 
 import "ome:core"
+
+LAYOUT_EPSILON :: 0.01
+
 @(private)
 layout_solve :: proc(tree: ^LayoutTree) {
 	pass_fit(tree, .X)
@@ -68,31 +71,54 @@ pass_grow :: proc(tree: ^LayoutTree, axis: core.Axis) {
 
 @(private)
 grow_stack :: proc(children: []LayoutNode, axis: core.Axis, available, spacing: f32) {
-	occupied := spacing_total(spacing, len(children))
-	fill_weight: f32
+	free_space := available - spacing_total(spacing, len(children))
 	for child in children {
-		occupied += child.size[axis] + core.rect_offset_axis(child.layout.margin, axis)
-		if weight, is_fill := child.layout.size[axis].(Fill); is_fill {
-			fill_weight += f32(weight)
-		}
+		free_space -= child.size[axis] + core.rect_offset_axis(child.layout.margin, axis)
 	}
 
-	free_space := available - occupied
 	if free_space < 0 {
 		shrink_stack(children, axis, -free_space)
 		return
 	}
 
-	if fill_weight == 0 {
-		return
-	}
+	for free_space > LAYOUT_EPSILON {
+		weight: f32
+		for child in children {
+			if child_weight, is_fill := child.layout.size[axis].(Fill);
+			   is_fill && !is_at_max(child, axis) {
+				weight += f32(child_weight)
+			}
+		}
+		if weight == 0 {
+			break
+		}
 
-	for &child in children {
-		if weight, is_fill := child.layout.size[axis].(Fill); is_fill {
-			grown := child.size[axis] + free_space * f32(weight) / fill_weight
-			child.size[axis] = clamp_size(grown, child.layout.min[axis], child.layout.max[axis])
+		remaining := free_space
+		froze_any := false
+		for &child in children {
+			child_weight, is_fill := child.layout.size[axis].(Fill)
+			if !is_fill || is_at_max(child, axis) {
+				continue
+			}
+
+			wanted := child.size[axis] + free_space * f32(child_weight) / weight
+			clamped := clamp_size(wanted, child.min_size[axis], child.layout.max[axis])
+			froze_any ||= clamped != wanted
+			remaining -= clamped - child.size[axis]
+			child.size[axis] = clamped
+		}
+
+		free_space = remaining
+		if !froze_any {
+			break
 		}
 	}
+}
+
+@(private)
+is_at_max :: proc(child: LayoutNode, axis: core.Axis) -> bool {
+	max_size := child.layout.max[axis]
+	return max_size > 0 && child.size[axis] >= max_size
 }
 
 @(private)
@@ -214,8 +240,8 @@ flow_stacks :: proc(flow: Flow, axis: core.Axis) -> bool {
 
 @(private)
 clamp_size :: proc(value, min_value, max_value: f32) -> f32 {
-	v := max(value, min_value)
-	return min(v, max_value) if max_value > 0 else v
+	v := min(value, max_value) if max_value > 0 else value
+	return max(v, min_value)
 }
 
 @(private)

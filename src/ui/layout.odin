@@ -10,11 +10,8 @@ Sizing :: union #no_nil {
 }
 
 Fixed :: distinct f32
-
 Fit :: struct {}
-
 Fill :: distinct f32
-
 Percent :: distinct f32
 
 Align :: enum {

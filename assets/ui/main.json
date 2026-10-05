@@ -14,7 +14,7 @@
 				"width": "fill",
 				"height": "fit",
 				"flow": "row",
-				"padding": [8, 8, 8, 8],
+				"padding": [12, 12, 12, 12],
 				"spacing": 8,
 				"align": "center"
 			},
@@ -29,14 +29,14 @@
 				},
 				{
 					"name": "spacer",
-					"layout": { "width": "fill" }
+					"layout": { "width": "fill", "height": 20, "align": "start" }
 				},
 				{
 					"name": "icon",
 					"kind": "image",
 					"atlas": "ui_atlas",
 					"sprite": "frame",
-					"slice": [8, 8, 8, 8],
+					"slice": [12, 12, 12, 12],
 					"layout": { "width": 48, "height": 48 }
 				}
 			]
@@ -50,7 +50,7 @@
 					"kind": "image",
 					"atlas": "ui_atlas",
 					"sprite": "panel",
-					"slice": [8, 8, 8, 8],
+					"slice": [12, 12, 12, 12],
 					"layout": { "width": { "fill": 1 }, "height": "fill" }
 				},
 				{
@@ -58,7 +58,7 @@
 					"kind": "image",
 					"atlas": "ui_atlas",
 					"sprite": "panel",
-					"slice": [8, 8, 8, 8],
+					"slice": [12, 12, 12, 12],
 					"color": [255, 200, 200, 255],
 					"layout": { "width": { "fill": 2 }, "height": "fill" }
 				},
@@ -67,7 +67,7 @@
 					"kind": "image",
 					"atlas": "ui_atlas",
 					"sprite": "panel",
-					"slice": [8, 8, 8, 8],
+					"slice": [12, 12, 12, 12],
 					"layout": { "width": { "fill": 1 }, "height": "fill" }
 				}
 			]
@@ -81,7 +81,7 @@
 					"kind": "image",
 					"atlas": "ui_atlas",
 					"sprite": "panel",
-					"slice": [8, 8, 8, 8],
+					"slice": [12, 12, 12, 12],
 					"color": [200, 255, 200, 255],
 					"layout": { "width": "fill", "height": "fill", "max": [120, 0] }
 				},
@@ -90,7 +90,7 @@
 					"kind": "image",
 					"atlas": "ui_atlas",
 					"sprite": "panel",
-					"slice": [8, 8, 8, 8],
+					"slice": [12, 12, 12, 12],
 					"layout": { "width": "fill", "height": "fill" }
 				}
 			]
@@ -110,7 +110,7 @@
 					"kind": "image",
 					"atlas": "ui_atlas",
 					"sprite": "frame",
-					"slice": [8, 8, 8, 8],
+					"slice": [12, 12, 12, 12],
 					"layout": { "width": 64, "height": 32, "align": "start" }
 				},
 				{
@@ -118,7 +118,7 @@
 					"kind": "image",
 					"atlas": "ui_atlas",
 					"sprite": "frame",
-					"slice": [8, 8, 8, 8],
+					"slice": [12, 12, 12, 12],
 					"layout": { "width": 64, "height": 32, "align": ["start", "center"] }
 				},
 				{
@@ -126,7 +126,7 @@
 					"kind": "image",
 					"atlas": "ui_atlas",
 					"sprite": "frame",
-					"slice": [8, 8, 8, 8],
+					"slice": [12, 12, 12, 12],
 					"layout": { "width": 64, "height": 32, "align": ["start", "end"] }
 				}
 			]
@@ -145,12 +145,12 @@
 					"kind": "image",
 					"atlas": "ui_atlas",
 					"sprite": "frame",
-					"slice": [8, 8, 8, 8],
+					"slice": [12, 12, 12, 12],
 					"layout": {
 						"width": 200,
 						"height": "fill",
 						"flow": "column",
-						"padding": [8, 8, 8, 8],
+						"padding": [12, 12, 12, 12],
 						"spacing": 8,
 						"content_align": "center"
 					},
@@ -160,14 +160,14 @@
 							"kind": "image",
 							"atlas": "ui_atlas",
 							"sprite": "panel",
-							"slice": [8, 8, 8, 8]
+							"slice": [12, 12, 12, 12]
 						},
 						{
 							"name": "col_margin",
 							"kind": "image",
 							"atlas": "ui_atlas",
 							"sprite": "panel",
-							"slice": [8, 8, 8, 8],
+							"slice": [12, 12, 12, 12],
 							"color": [200, 200, 255, 255],
 							"layout": { "margin": [20, 0, 10, 10] }
 						},
@@ -176,7 +176,7 @@
 							"kind": "image",
 							"atlas": "ui_atlas",
 							"sprite": "panel",
-							"slice": [8, 8, 8, 8],
+							"slice": [12, 12, 12, 12],
 							"layout": { "align": "end" }
 						},
 						{
@@ -184,7 +184,7 @@
 							"kind": "image",
 							"atlas": "ui_atlas",
 							"sprite": "panel",
-							"slice": [8, 8, 8, 8],
+							"slice": [12, 12, 12, 12],
 							"color": [255, 255, 200, 255],
 							"layout": { "width": "fill", "height": 24 }
 						}
@@ -195,12 +195,12 @@
 					"kind": "image",
 					"atlas": "ui_atlas",
 					"sprite": "frame",
-					"slice": [8, 8, 8, 8],
+					"slice": [12, 12, 12, 12],
 					"layout": {
 						"width": "fit",
 						"height": "fit",
 						"min": [150, 0],
-						"padding": [8, 8, 8, 8],
+						"padding": [12, 12, 12, 12],
 						"align": ["start", "center"]
 					},
 					"children": [
@@ -219,7 +219,7 @@
 						"width": "fill",
 						"height": "fill",
 						"flow": "overlay",
-						"padding": [8, 8, 8, 8]
+						"padding": [12, 12, 12, 12]
 					},
 					"children": [
 						{
@@ -227,7 +227,7 @@
 							"kind": "image",
 							"atlas": "ui_atlas",
 							"sprite": "frame",
-							"slice": [8, 8, 8, 8],
+							"slice": [12, 12, 12, 12],
 							"color": [120, 120, 120, 255],
 							"layout": { "width": "fill", "height": "fill" }
 						},
@@ -236,7 +236,7 @@
 							"kind": "image",
 							"atlas": "ui_atlas",
 							"sprite": "panel",
-							"slice": [8, 8, 8, 8],
+							"slice": [12, 12, 12, 12],
 							"layout": { "width": 48, "height": 48, "margin": [10, 0, 10, 0] }
 						},
 						{
@@ -252,7 +252,7 @@
 							"kind": "image",
 							"atlas": "ui_atlas",
 							"sprite": "panel",
-							"slice": [8, 8, 8, 8],
+							"slice": [12, 12, 12, 12],
 							"layout": {
 								"width": 48,
 								"height": 48,
@@ -265,7 +265,7 @@
 							"kind": "image",
 							"atlas": "ui_atlas",
 							"sprite": "panel",
-							"slice": [8, 8, 8, 8],
+							"slice": [12, 12, 12, 12],
 							"color": [255, 200, 255, 255],
 							"layout": {
 								"width": "fill",

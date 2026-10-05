@@ -121,7 +121,7 @@ layout_from_object :: proc(obj: json.Object, name: string) -> Layout {
 
 	align := json_align(obj, "align", name)
 
-	flow_string, has_flow := json_string(obj, "direction")
+	flow_string, has_flow := json_string(obj, "flow")
 	flow: Flow
 	if has_flow {
 		switch flow_string {

@@ -21,11 +21,6 @@ LayoutNode :: struct {
 }
 
 @(private)
-layout_node_children :: proc(tree: ^LayoutTree, node: LayoutNode) -> []LayoutNode {
-	return tree.nodes[node.first_child:node.first_child + node.child_count]
-}
-
-@(private)
 layout_build :: proc(tree: ^LayoutTree, scene: ^Scene) {
 	clear(&tree.nodes)
 	append(&tree.nodes, layout_node_make(scene, scene.root_handle, -1))
@@ -40,18 +35,17 @@ layout_build :: proc(tree: ^LayoutTree, scene: ^Scene) {
 	}
 }
 
-
 @(private)
 layout_node_make :: proc(scene: ^Scene, handle: PanelHandle, parent: int) -> LayoutNode {
 	panel := scene_get_panel(scene, handle)
-	intrinsic := layout_intrinsic(scene, panel)
+	intrinsic, intrinsic_min := layout_intrinsic(scene, panel)
 
 	return LayoutNode {
 		handle = handle,
 		parent = parent,
 		layout = panel.layout,
 		intrinsic = intrinsic,
-		intrinsic_min = intrinsic,
+		intrinsic_min = intrinsic_min,
 	}
 }
 
@@ -64,38 +58,41 @@ layout_write_back :: proc(tree: ^LayoutTree, scene: ^Scene) {
 }
 
 @(private)
-layout_intrinsic :: proc(scene: ^Scene, panel: ^Panel) -> [core.Axis]f32 {
+layout_intrinsic :: proc(
+	scene: ^Scene,
+	panel: ^Panel,
+) -> (
+	size: [core.Axis]f32,
+	min_size: [core.Axis]f32,
+) {
 	#partial switch spec in panel.spec {
 	case TextSpec:
 		font := assets.library_get_font(scene.library, spec.font_handle)
 		if font == nil {
-			return {}
+			return {}, {}
 		}
-		size := assets.font_text_measure(font, spec.text, spec.font_size)
-		return {.X = size.x, .Y = size.y}
+		measured := assets.font_text_measure(font, spec.text, spec.font_size)
+		size = {
+			.X = measured.x,
+			.Y = measured.y,
+		}
+		return size, size
 	case ImageSpec:
 		atlas := assets.library_get_atlas(scene.library, spec.atlas_handle)
 		if atlas == nil {
-			return {}
+			return {}, {}
 		}
 		sprite, found := atlas.sprites[spec.sprite_name]
 		if !found {
-			return {}
+			return {}, {}
 		}
-		return {.X = sprite.atlas_rect.w, .Y = sprite.atlas_rect.h}
+		return {.X = sprite.atlas_rect.w, .Y = sprite.atlas_rect.h}, {}
 	}
 
-	return {}
+	return {}, {}
 }
 
 @(private)
-scene_update_layout :: proc(scene: ^Scene) {
-	if !scene.layout_dirty {
-		return
-	}
-
-	scene.layout_dirty = false
-	layout_build(&scene.layout_tree, scene)
-	layout_solve(&scene.layout_tree)
-	layout_write_back(&scene.layout_tree, scene)
+layout_node_children :: proc(tree: ^LayoutTree, node: LayoutNode) -> []LayoutNode {
+	return tree.nodes[node.first_child:node.first_child + node.child_count]
 }
