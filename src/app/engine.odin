@@ -123,6 +123,8 @@ engine_process_events :: proc(engine: ^Engine) {
 			engine_offer_event(engine, event)
 		case platform.MouseWheelEvent:
 			engine_offer_event(engine, event)
+		case platform.MouseLeaveEvent:
+			engine_offer_event(engine, event)
 		}
 	}
 }
