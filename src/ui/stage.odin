@@ -101,10 +101,12 @@ stage_hide_scene :: proc(stage: ^Stage, handle: SceneHandle) {
 	ordered_remove(&stage.active_scene_handles, i)
 	if scene := stage_get_scene(stage, handle); scene != nil {
 		scene_clear_input(scene)
+		scene.has_mouse = false
 	}
 }
 
 stage_render :: proc(stage: ^Stage, renderer: ^render.Renderer) {
+	render.renderer_set_camera(renderer, render.SCREEN_CAMERA)
 	for handle in stage.active_scene_handles {
 		if scene := stage_get_scene(stage, handle); scene != nil {
 			scene_render(scene, renderer)

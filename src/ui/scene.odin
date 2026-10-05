@@ -20,6 +20,8 @@ Scene :: struct {
 	pressed_handle:   PanelHandle,
 	clicks:           [dynamic]Click,
 	panels:           handle_map.Map(Panel, PanelHandle),
+	mouse_position:   [2]f32,
+	has_mouse:        bool,
 	name:             string,
 	modal:            bool,
 	following_window: bool,
@@ -157,21 +159,7 @@ scene_handle_event :: proc(scene: ^Scene, event: platform.Event) -> bool {
 		}
 		return false
 	case platform.MouseMoveEvent:
-		hit_handle := scene_interaction_target(
-			scene,
-			panel_hit_test(scene, scene.root_handle, e.position),
-		)
-		if hit_handle != scene.hovered_handle {
-			if scene.hovered_handle != NO_PANEL {
-				scene_get_panel(scene, scene.hovered_handle).hovered = false
-			}
-			if hit_handle != NO_PANEL {
-				scene_get_panel(scene, hit_handle).hovered = true
-			}
-
-			scene.hovered_handle = hit_handle
-		}
-		return hit_handle != NO_PANEL
+		return scene_update_hover(scene, e.position) != NO_PANEL
 	case platform.MouseButtonEvent:
 		hit_handle := scene_interaction_target(
 			scene,
@@ -211,9 +199,34 @@ scene_handle_event :: proc(scene: ^Scene, event: platform.Event) -> bool {
 			)
 		}
 		return previously_pressed_handle != NO_PANEL
+	case platform.MouseLeaveEvent:
+		scene_clear_hover(scene)
 	}
 
 	return false
+}
+
+@(private)
+scene_update_hover :: proc(scene: ^Scene, position: [2]f32) -> PanelHandle {
+	scene.mouse_position = position
+	scene.has_mouse = true
+
+	hit_handle := scene_interaction_target(
+		scene,
+		panel_hit_test(scene, scene.root_handle, position),
+	)
+	if hit_handle != scene.hovered_handle {
+		if panel := scene_get_panel(scene, scene.hovered_handle); panel != nil {
+			panel.hovered = false
+		}
+		if panel := scene_get_panel(scene, hit_handle); panel != nil {
+			panel.hovered = true
+		}
+
+		scene.hovered_handle = hit_handle
+	}
+
+	return hit_handle
 }
 
 @(private)
@@ -265,6 +278,7 @@ scene_clear_hover :: proc(scene: ^Scene) {
 		panel.hovered = false
 	}
 	scene.hovered_handle = NO_PANEL
+	scene.has_mouse = false
 }
 
 scene_render :: proc(scene: ^Scene, renderer: ^render.Renderer) {
@@ -281,4 +295,20 @@ scene_destroy :: proc(scene: ^Scene) {
 	delete(scene.name, scene.allocator)
 	handle_map.delete(&scene.panels)
 	delete(scene.uuid, scene.allocator)
+}
+
+@(private)
+scene_update_layout :: proc(scene: ^Scene) {
+	if !scene.layout_dirty {
+		return
+	}
+
+	scene.layout_dirty = false
+	layout_build(&scene.layout_tree, scene)
+	layout_solve(&scene.layout_tree)
+	layout_write_back(&scene.layout_tree, scene)
+
+	if scene.has_mouse {
+		scene_update_hover(scene, scene.mouse_position)
+	}
 }

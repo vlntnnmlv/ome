@@ -5,6 +5,8 @@ import "ome:core"
 import "ome:gpu"
 import "ome:platform"
 
+SCREEN_CAMERA: u32 : 0
+
 Renderer :: struct {
 	device:  ^gpu.Device,
 	batch:   Batch,
@@ -57,20 +59,28 @@ renderer_set_camera :: proc(renderer: ^Renderer, index: u32) {
 	renderer.batch.active_state.view = index
 }
 
+renderer_get_camera :: proc(renderer: ^Renderer) -> u32 {
+	return renderer.batch.active_state.view
+}
+
 renderer_get_camera2d :: proc(renderer: ^Renderer, index: u32) -> ^core.Camera2D {
+	assert(index != SCREEN_CAMERA, "render: camera 0 is reserved for screen space")
 	return &renderer.batch.cameras[index].(core.Camera2D)
 }
 
 renderer_set_camera2d :: proc(renderer: ^Renderer, index: u32, camera: core.Camera2D) {
+	assert(index != SCREEN_CAMERA, "render: camera 0 is reserved for screen space")
 	assert(index < MAX_CAMERAS)
 	renderer.batch.cameras[index] = camera
 }
 
 renderer_get_camera3d :: proc(renderer: ^Renderer, index: u32) -> ^core.Camera3D {
+	assert(index != SCREEN_CAMERA, "render: camera 0 is reserved for screen space")
 	return &renderer.batch.cameras[index].(core.Camera3D)
 }
 
 renderer_set_camera3d :: proc(renderer: ^Renderer, index: u32, camera: core.Camera3D) {
+	assert(index != SCREEN_CAMERA, "render: camera 0 is reserved for screen space")
 	assert(index < MAX_CAMERAS)
 	renderer.batch.cameras[index] = camera
 }

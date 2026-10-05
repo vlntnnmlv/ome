@@ -167,6 +167,7 @@ main :: proc() {
 		bind.binder_draw(binder)
 
 		ui.stage_render(stage, engine.renderer)
+		render.renderer_set_camera(engine.renderer, 1)
 		render.text(
 			engine.renderer,
 			fmt.tprint(engine.clock.fps),

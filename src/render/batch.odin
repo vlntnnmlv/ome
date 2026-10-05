@@ -54,6 +54,7 @@ batch_resize :: proc(batch: ^Batch, window_info: platform.WindowInfo) {
 	for &camera in batch.cameras {
 		core.camera_set_viewport_size(&camera, logical_size)
 	}
+	batch.cameras[SCREEN_CAMERA] = core.camera2d_create(logical_size)
 }
 
 @(private)
