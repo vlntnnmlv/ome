@@ -136,6 +136,7 @@ layout_from_object :: proc(obj: json.Object, name: string) -> Layout {
 
 	content_align_string, has_content_align := json_string(obj, "content_align")
 	content_align := Align.Start
+
 	if has_content_align {
 		switch content_align_string {
 		case "center":
