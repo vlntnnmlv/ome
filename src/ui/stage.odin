@@ -1,6 +1,7 @@
 package omeui
 
 import "core:mem"
+import "ome:assets"
 
 import "ome:core"
 import "ome:handle_map"
@@ -10,13 +11,18 @@ import "ome:render"
 Stage :: struct {
 	scenes:               handle_map.Map(Scene, SceneHandle),
 	active_scene_handles: [dynamic]SceneHandle,
+	library:              ^assets.Library,
 }
 
-stage_create :: proc(allocator: mem.Allocator = context.allocator) -> ^Stage {
+stage_create :: proc(
+	library: ^assets.Library,
+	allocator: mem.Allocator = context.allocator,
+) -> ^Stage {
 	stage := new(Stage)
 
 	scenes, err := handle_map.make(Scene, SceneHandle, allocator)
 	ensure(err == nil)
+	stage.library = library
 	stage.scenes = scenes
 	stage.active_scene_handles = make([dynamic]SceneHandle, allocator)
 
@@ -29,7 +35,10 @@ stage_add_scene :: proc(
 	rect: core.Rect,
 	allocator: mem.Allocator = context.allocator,
 ) -> SceneHandle {
-	handle, err := handle_map.add(&stage.scenes, scene_create(name, rect, allocator))
+	handle, err := handle_map.add(
+		&stage.scenes,
+		scene_create(name, rect, stage.library, allocator),
+	)
 	ensure(err == nil)
 
 	return handle
@@ -92,10 +101,12 @@ stage_hide_scene :: proc(stage: ^Stage, handle: SceneHandle) {
 	ordered_remove(&stage.active_scene_handles, i)
 	if scene := stage_get_scene(stage, handle); scene != nil {
 		scene_clear_input(scene)
+		scene.has_mouse = false
 	}
 }
 
 stage_render :: proc(stage: ^Stage, renderer: ^render.Renderer) {
+	render.renderer_set_camera(renderer, render.SCREEN_CAMERA)
 	for handle in stage.active_scene_handles {
 		if scene := stage_get_scene(stage, handle); scene != nil {
 			scene_render(scene, renderer)

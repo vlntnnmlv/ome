@@ -45,11 +45,11 @@ camera_get_view_projection :: proc(camera: Camera) -> matrix[4, 4]f32 {
 camera_set_viewport_size :: proc(camera: ^Camera, viewport_size: [2]f32) {
 	switch &c in camera {
 	case Camera2D:
-		c.viewport.x = viewport_size.x
-		c.viewport.y = viewport_size.y
+		c.viewport.w = viewport_size.x
+		c.viewport.h = viewport_size.y
 	case Camera3D:
-		c.viewport.x = viewport_size.x
-		c.viewport.y = viewport_size.y
+		c.viewport.w = viewport_size.x
+		c.viewport.h = viewport_size.y
 	}
 }
 

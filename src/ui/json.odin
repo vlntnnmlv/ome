@@ -41,10 +41,15 @@ panel_description_from_object :: proc(
 ) {
 	name, _ := json_string(obj, "name", "unnamed")
 
-	r: [4]f32
-	if !json_numbers(obj, "rect", r[:]) {
-		log.warnf("ui/json: panel '%s' has no valid rect", name)
-		return {}, false
+	// r: [4]f32
+	// if !json_numbers(obj, "rect", r[:]) {
+	// 	log.warnf("ui/json: panel '%s' has no valid rect", name)
+	// 	return {}, false
+	// }
+
+	layout: Layout = {}
+	if layout_object, has_layout := obj["layout"].(json.Object); has_layout {
+		layout = layout_from_object(layout_object, name)
 	}
 
 	spec, spec_ok := spec_from_object(library, obj)
@@ -54,8 +59,8 @@ panel_description_from_object :: proc(
 
 	description = PanelDescription {
 		name     = name,
-		rect     = core.Rect{r[0], r[1], r[2], r[3]},
 		spec     = spec,
+		layout   = layout,
 		children = make([dynamic]PanelDescription, allocator),
 		bindings = make([dynamic]Binding, allocator),
 	}
@@ -99,6 +104,105 @@ panel_description_from_object :: proc(
 	}
 
 	return description, true
+}
+
+@(private)
+layout_from_object :: proc(obj: json.Object, name: string) -> Layout {
+	layout := Layout{}
+
+	width := json_sizing_from_object(obj, "width", name)
+	height := json_sizing_from_object(obj, "height", name)
+
+	min_s: [2]f32
+	_ = json_numbers(obj, "min", min_s[:])
+
+	max_s: [2]f32
+	_ = json_numbers(obj, "max", max_s[:])
+
+	align := json_align(obj, "align", name)
+
+	flow_string, has_flow := json_string(obj, "flow")
+	flow: Flow
+	if has_flow {
+		switch flow_string {
+		case "row":
+			flow = .Horizontal
+		case "column":
+			flow = .Vertical
+		case "overlay":
+			flow = .Overlay
+		}
+	}
+
+	content_align_string, has_content_align := json_string(obj, "content_align")
+	content_align := Align.Start
+
+	if has_content_align {
+		switch content_align_string {
+		case "center":
+			content_align = .Center
+		case "end":
+			content_align = .End
+		}
+	}
+
+	padding: [4]f32
+	_ = json_numbers(obj, "padding", padding[:])
+
+	margin: [4]f32
+	_ = json_numbers(obj, "margin", margin[:])
+
+	spacing: f32 = json_number(obj, "spacing")
+
+	layout.size = {
+		.X = width,
+		.Y = height,
+	}
+	layout.min = {
+		.X = min_s.x,
+		.Y = min_s.y,
+	}
+	layout.max = {
+		.X = max_s.x,
+		.Y = max_s.y,
+	}
+	layout.align = align
+	layout.flow = flow
+	layout.padding = core.RectOffset{padding[0], padding[1], padding[2], padding[3]}
+	layout.margin = core.RectOffset{margin[0], margin[1], margin[2], margin[3]}
+	layout.spacing = spacing
+	layout.content_align = content_align
+
+	return layout
+}
+
+@(private)
+json_sizing_from_object :: proc(obj: json.Object, key, name: string) -> Sizing {
+	value, found := obj[key]
+	if !found {
+		return Fit{}
+	}
+
+	#partial switch sizing in value {
+	case json.Float:
+		return Fixed(f32(sizing))
+	case json.Integer:
+		return Fixed(f32(sizing))
+	case json.String:
+		switch sizing {
+		case "fit":
+			return Fit{}
+		case "fill":
+			return Fill(1)
+		}
+	case json.Object:
+		if w, ok := sizing["fill"].(json.Float); ok {
+			return Fill(f32(w))
+		}
+	}
+
+	log.warnf("ui/json: panel '%s': invalid '%s', using fit", name, key)
+	return Fit{}
 }
 
 @(private)
@@ -200,6 +304,41 @@ json_string :: proc(obj: json.Object, key: string, fallback := "") -> (string, b
 		return string(str), true
 	}
 	return fallback, false
+}
+
+json_align :: proc(obj: json.Object, key, name: string) -> (align: [core.Axis]Align) {
+	#partial switch value in obj[key] {
+	case json.String:
+		a := json_align_value(string(value), key, name)
+		align = {
+			.X = a,
+			.Y = a,
+		}
+	case json.Array:
+		if len(value) != 2 {
+			log.warnf("ui/json: panel '%s': '%s' array needs 2 values", name, key)
+			return
+		}
+		for axis in core.Axis {
+			if s, is_string := value[int(axis)].(json.String); is_string {
+				align[axis] = json_align_value(string(s), key, name)
+			}
+		}
+	}
+	return
+}
+
+json_align_value :: proc(s, key, name: string) -> Align {
+	switch s {
+	case "start":
+		return .Start
+	case "center":
+		return .Center
+	case "end":
+		return .End
+	}
+	log.warnf("ui/json: panel '%s': unknown %s '%s', using start", name, key, s)
+	return .Start
 }
 
 @(private = "file")

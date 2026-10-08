@@ -58,6 +58,12 @@ font_nearest_size :: proc(font: ^Font, size: u32) -> u32 {
 	return best_fit
 }
 
+font_ascent :: proc(font: ^Font, font_size: u32) -> f32 {
+	ascent, descent, gap: i32
+	STBTT.GetFontVMetrics(&font.info, &ascent, &descent, &gap)
+	return f32(ascent) * STBTT.ScaleForPixelHeight(&font.info, f32(font_size))
+}
+
 @(private)
 font_load :: proc(font: ^Font, path: string, sizes: []u32 = {}) -> Error {
 	font.path = path

@@ -8,12 +8,16 @@ Rect :: struct {
 	x, y, w, h: f32,
 }
 
-FlipAxis :: enum u8 {
+Span :: struct {
+	start, size: f32,
+}
+
+Axis :: enum u8 {
 	X,
 	Y,
 }
 
-Flip :: bit_set[FlipAxis;u8]
+Flip :: bit_set[Axis;u8]
 
 UNIT_RECT :: Rect{0, 0, 1, 1}
 ZERO_RECT :: Rect{0, 0, 0, 0}
@@ -65,6 +69,22 @@ rect_union :: proc(a, b: Rect) -> Rect {
 	x1 := max(a.x + a.w, b.x + b.w)
 	y1 := max(a.y + a.h, b.y + b.h)
 	return Rect{x0, y0, x1 - x0, y1 - y0}
+}
+
+rect_offset_sides :: proc(offset: RectOffset, axis: Axis) -> (start, end: f32) {
+	switch axis {
+	case .X:
+		start = offset.left; end = offset.right
+	case .Y:
+		start = offset.top; end = offset.bottom
+	}
+
+	return
+}
+
+rect_offset_axis :: proc(offset: RectOffset, axis: Axis) -> f32 {
+	start, end := rect_offset_sides(offset, axis)
+	return start + end
 }
 
 rect_offset_flip :: proc(offset: RectOffset, flip: Flip) -> RectOffset {

@@ -2,6 +2,7 @@ package omeui
 
 import "core:mem"
 import "core:strings"
+import "ome:assets"
 
 import "ome:core"
 import "ome:handle_map"
@@ -19,10 +20,15 @@ Scene :: struct {
 	pressed_handle:   PanelHandle,
 	clicks:           [dynamic]Click,
 	panels:           handle_map.Map(Panel, PanelHandle),
+	mouse_position:   [2]f32,
+	has_mouse:        bool,
 	name:             string,
 	modal:            bool,
 	following_window: bool,
 	debug:            bool,
+	library:          ^assets.Library,
+	layout_dirty:     bool,
+	layout_tree:      LayoutTree,
 }
 
 Click :: struct {
@@ -36,26 +42,36 @@ Click :: struct {
 scene_create :: proc(
 	name: string,
 	rect: core.Rect,
+	library: ^assets.Library,
 	allocator: mem.Allocator = context.allocator,
 ) -> Scene {
 	panels, err := handle_map.make(Panel, PanelHandle, allocator)
 	ensure(err == nil)
 
 	scene: Scene = {
-		allocator        = allocator,
-		uuid             = core.uuid_create(allocator),
-		panels           = panels,
-		clicks           = make([dynamic]Click, allocator),
+		allocator = allocator,
+		uuid = core.uuid_create(allocator),
+		panels = panels,
+		clicks = make([dynamic]Click, allocator),
 		following_window = true,
+		library = library,
+		layout_tree = {nodes = make([dynamic]LayoutNode, allocator)},
 	}
 
-	root_panel := panel_create(NO_PANEL, "root", rect, PanelSpec{}, allocator)
+	root_panel := panel_create(
+		NO_PANEL,
+		"root",
+		PanelSpec{},
+		{size = {.X = Fixed(rect.w), .Y = Fixed(rect.h)}},
+		allocator,
+	)
 	root_panel.ignore_events = true
 
 	root_handle: PanelHandle
 	root_handle, err = handle_map.add(&scene.panels, root_panel)
 	ensure(err == nil)
 
+	scene.layout_dirty = true
 	scene.root_handle = root_handle
 	scene.name = strings.clone(name, allocator)
 
@@ -66,20 +82,21 @@ scene_add_panel :: proc(
 	scene: ^Scene,
 	parent_handle: PanelHandle,
 	name: string,
-	rect: core.Rect,
 	spec: Spec,
+	layout: Layout,
 ) -> PanelHandle {
 	if parent_handle == NO_PANEL {
 		return NO_PANEL
 	}
 
-	panel := panel_create(parent_handle, name, rect, spec, scene.allocator)
+	panel := panel_create(parent_handle, name, spec, layout, scene.allocator)
 	panel_handle, err := handle_map.add(&scene.panels, panel)
 	ensure(err == nil)
 
-
 	parent := handle_map.get(scene.panels, parent_handle)
 	append(&parent.child_handles, panel_handle)
+
+	scene.layout_dirty = true
 	return panel_handle
 }
 
@@ -124,32 +141,25 @@ scene_remove_panel :: proc(scene: ^Scene, handle: PanelHandle) {
 
 	scene_clear_input(scene)
 	clear(&scene.clicks)
+	scene.layout_dirty = true
 }
 
 scene_handle_event :: proc(scene: ^Scene, event: platform.Event) -> bool {
+	scene_update_layout(scene)
+
 	#partial switch e in event {
 	case platform.ResizeEvent:
 		if scene.following_window {
 			root := scene_get_panel(scene, scene.root_handle)
-			root.rect = core.Rect{0, 0, f32(e.info.logical_width), f32(e.info.logical_height)}
+			root.layout.size = {
+				.X = Fixed(f32(e.info.logical_width)),
+				.Y = Fixed(f32(e.info.logical_height)),
+			}
+			scene.layout_dirty = true
 		}
 		return false
 	case platform.MouseMoveEvent:
-		hit_handle := scene_interaction_target(
-			scene,
-			panel_hit_test(scene, scene.root_handle, e.position),
-		)
-		if hit_handle != scene.hovered_handle {
-			if scene.hovered_handle != NO_PANEL {
-				scene_get_panel(scene, scene.hovered_handle).hovered = false
-			}
-			if hit_handle != NO_PANEL {
-				scene_get_panel(scene, hit_handle).hovered = true
-			}
-
-			scene.hovered_handle = hit_handle
-		}
-		return hit_handle != NO_PANEL
+		return scene_update_hover(scene, e.position) != NO_PANEL
 	case platform.MouseButtonEvent:
 		hit_handle := scene_interaction_target(
 			scene,
@@ -189,9 +199,34 @@ scene_handle_event :: proc(scene: ^Scene, event: platform.Event) -> bool {
 			)
 		}
 		return previously_pressed_handle != NO_PANEL
+	case platform.MouseLeaveEvent:
+		scene_clear_hover(scene)
 	}
 
 	return false
+}
+
+@(private)
+scene_update_hover :: proc(scene: ^Scene, position: [2]f32) -> PanelHandle {
+	scene.mouse_position = position
+	scene.has_mouse = true
+
+	hit_handle := scene_interaction_target(
+		scene,
+		panel_hit_test(scene, scene.root_handle, position),
+	)
+	if hit_handle != scene.hovered_handle {
+		if panel := scene_get_panel(scene, scene.hovered_handle); panel != nil {
+			panel.hovered = false
+		}
+		if panel := scene_get_panel(scene, hit_handle); panel != nil {
+			panel.hovered = true
+		}
+
+		scene.hovered_handle = hit_handle
+	}
+
+	return hit_handle
 }
 
 @(private)
@@ -243,9 +278,12 @@ scene_clear_hover :: proc(scene: ^Scene) {
 		panel.hovered = false
 	}
 	scene.hovered_handle = NO_PANEL
+	scene.has_mouse = false
 }
 
 scene_render :: proc(scene: ^Scene, renderer: ^render.Renderer) {
+	scene_update_layout(scene)
+
 	panel_render(scene, scene.root_handle, renderer)
 }
 
@@ -253,7 +291,24 @@ scene_destroy :: proc(scene: ^Scene) {
 	panel_destroy(scene, handle_map.get(scene.panels, scene.root_handle))
 
 	delete(scene.clicks)
+	delete(scene.layout_tree.nodes)
 	delete(scene.name, scene.allocator)
 	handle_map.delete(&scene.panels)
 	delete(scene.uuid, scene.allocator)
+}
+
+@(private)
+scene_update_layout :: proc(scene: ^Scene) {
+	if !scene.layout_dirty {
+		return
+	}
+
+	scene.layout_dirty = false
+	layout_build(&scene.layout_tree, scene)
+	layout_solve(&scene.layout_tree)
+	layout_write_back(&scene.layout_tree, scene)
+
+	if scene.has_mouse {
+		scene_update_hover(scene, scene.mouse_position)
+	}
 }

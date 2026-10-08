@@ -271,6 +271,7 @@ Event :: union {
 	MouseMoveEvent,
 	MouseButtonEvent,
 	MouseWheelEvent,
+	MouseLeaveEvent,
 	DropFileEvent,
 }
 
@@ -301,6 +302,8 @@ MouseWheelEvent :: struct {
 	position: [2]f32,
 	delta:    [2]f32,
 }
+
+MouseLeaveEvent :: struct {}
 
 DropFileEvent :: struct {
 	path: string,
@@ -353,6 +356,8 @@ event_poll :: proc(window: ^Window) -> (Event, bool) {
 					position = {e.wheel.mouse_x, e.wheel.mouse_y},
 				},
 				true
+		case .WINDOW_MOUSE_LEAVE:
+			return MouseLeaveEvent{}, true
 		}
 	}
 

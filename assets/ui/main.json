@@ -1,17 +1,280 @@
 {
 	"name": "root",
-	"rect": [0, 0, 1080, 720],
+	"layout": {
+		"width": "fill",
+		"height": "fill",
+		"flow": "column",
+		"padding": [16, 16, 16, 16],
+		"spacing": 16
+	},
 	"children": [
 		{
-			"name": "flipped_img",
-			"rect": [500, 500, 100, 100],
-			"kind": "image",
-			"atlas": "ui_atlas",
-			"sprite": "frame",
-			"color": [255, 255, 255, 255],
-			"slice": [8, 8, 8, 8],
-			"flip": "",
-			"bind": { "flip": "flip" }
+			"name": "header",
+			"layout": {
+				"width": "fill",
+				"height": "fit",
+				"flow": "row",
+				"padding": [12, 12, 12, 12],
+				"spacing": 8,
+				"align": "center"
+			},
+			"children": [
+				{
+					"name": "title",
+					"kind": "text",
+					"text": "Layout test",
+					"font": "iosevka",
+					"size": 32,
+					"layout": { "align": ["start", "center"] }
+				},
+				{
+					"name": "spacer",
+					"layout": { "width": "fill", "height": 20, "align": "start" }
+				},
+				{
+					"name": "icon",
+					"kind": "image",
+					"atlas": "ui_atlas",
+					"sprite": "bluebell",
+					"layout": { "width": 128, "height": 128 }
+				}
+			]
+		},
+		{
+			"name": "weights",
+			"layout": { "width": "fill", "height": 60, "flow": "row", "spacing": 8 },
+			"children": [
+				{
+					"name": "fill_1a",
+					"kind": "image",
+					"atlas": "ui_atlas",
+					"sprite": "panel",
+					"slice": [12, 12, 12, 12],
+					"layout": { "width": { "fill": 1 }, "height": "fill" }
+				},
+				{
+					"name": "fill_2",
+					"kind": "image",
+					"atlas": "ui_atlas",
+					"sprite": "panel",
+					"slice": [12, 12, 12, 12],
+					"color": [255, 200, 200, 255],
+					"layout": { "width": { "fill": 2 }, "height": "fill" }
+				},
+				{
+					"name": "fill_1b",
+					"kind": "image",
+					"atlas": "ui_atlas",
+					"sprite": "panel",
+					"slice": [12, 12, 12, 12],
+					"layout": { "width": { "fill": 1 }, "height": "fill" }
+				}
+			]
+		},
+		{
+			"name": "max_clamp",
+			"layout": { "width": "fill", "height": 40, "flow": "row", "spacing": 8 },
+			"children": [
+				{
+					"name": "clamped",
+					"kind": "image",
+					"atlas": "ui_atlas",
+					"sprite": "panel",
+					"slice": [12, 12, 12, 12],
+					"color": [200, 255, 200, 255],
+					"layout": { "width": "fill", "height": "fill", "max": [120, 0] }
+				},
+				{
+					"name": "unclamped",
+					"kind": "image",
+					"atlas": "ui_atlas",
+					"sprite": "panel",
+					"slice": [12, 12, 12, 12],
+					"layout": { "width": "fill", "height": "fill" }
+				}
+			]
+		},
+		{
+			"name": "content_align_end",
+			"layout": {
+				"width": "fill",
+				"height": 80,
+				"flow": "row",
+				"spacing": 8,
+				"content_align": "end"
+			},
+			"children": [
+				{
+					"name": "cross_start",
+					"kind": "image",
+					"atlas": "ui_atlas",
+					"sprite": "frame",
+					"slice": [12, 12, 12, 12],
+					"layout": { "width": 64, "height": 32, "align": "start" }
+				},
+				{
+					"name": "cross_center",
+					"kind": "image",
+					"atlas": "ui_atlas",
+					"sprite": "frame",
+					"slice": [12, 12, 12, 12],
+					"layout": { "width": 64, "height": 32, "align": ["start", "center"] }
+				},
+				{
+					"name": "cross_end",
+					"kind": "image",
+					"atlas": "ui_atlas",
+					"sprite": "frame",
+					"slice": [12, 12, 12, 12],
+					"layout": { "width": 64, "height": 32, "align": ["start", "end"] }
+				}
+			]
+		},
+		{
+			"name": "body",
+			"layout": {
+				"width": "fill",
+				"height": "fill",
+				"flow": "row",
+				"spacing": 16
+			},
+			"children": [
+				{
+					"name": "column",
+					"kind": "image",
+					"atlas": "ui_atlas",
+					"sprite": "frame",
+					"slice": [12, 12, 12, 12],
+					"layout": {
+						"width": 200,
+						"height": "fill",
+						"flow": "column",
+						"padding": [12, 12, 12, 12],
+						"spacing": 8,
+						"content_align": "center"
+					},
+					"children": [
+						{
+							"name": "col_plain",
+							"kind": "image",
+							"atlas": "ui_atlas",
+							"sprite": "panel",
+							"slice": [12, 12, 12, 12]
+						},
+						{
+							"name": "col_margin",
+							"kind": "image",
+							"atlas": "ui_atlas",
+							"sprite": "panel",
+							"slice": [12, 12, 12, 12],
+							"color": [200, 200, 255, 255],
+							"layout": { "margin": [20, 0, 10, 10] }
+						},
+						{
+							"name": "col_right",
+							"kind": "image",
+							"atlas": "ui_atlas",
+							"sprite": "panel",
+							"slice": [12, 12, 12, 12],
+							"layout": { "align": "end" }
+						},
+						{
+							"name": "col_stretch",
+							"kind": "image",
+							"atlas": "ui_atlas",
+							"sprite": "panel",
+							"slice": [12, 12, 12, 12],
+							"color": [255, 255, 200, 255],
+							"layout": { "width": "fill", "height": 24 }
+						}
+					]
+				},
+				{
+					"name": "fit_min",
+					"kind": "image",
+					"atlas": "ui_atlas",
+					"sprite": "frame",
+					"slice": [12, 12, 12, 12],
+					"layout": {
+						"width": "fit",
+						"height": "fit",
+						"min": [150, 0],
+						"padding": [12, 12, 12, 12],
+						"align": ["start", "center"]
+					},
+					"children": [
+						{
+							"name": "fit_min_text",
+							"kind": "text",
+							"text": "min",
+							"font": "iosevka",
+							"size": 32
+						}
+					]
+				},
+				{
+					"name": "overlay",
+					"layout": {
+						"width": "fill",
+						"height": "fill",
+						"flow": "overlay",
+						"padding": [12, 12, 12, 12]
+					},
+					"children": [
+						{
+							"name": "ov_background",
+							"kind": "image",
+							"atlas": "ui_atlas",
+							"sprite": "frame",
+							"slice": [12, 12, 12, 12],
+							"color": [120, 120, 120, 255],
+							"layout": { "width": "fill", "height": "fill" }
+						},
+						{
+							"name": "ov_top_left",
+							"kind": "image",
+							"atlas": "ui_atlas",
+							"sprite": "panel",
+							"slice": [12, 12, 12, 12],
+							"layout": { "width": 48, "height": 48, "margin": [10, 0, 10, 0] }
+						},
+						{
+							"name": "ov_center_text",
+							"kind": "text",
+							"text": "overlay",
+							"font": "iosevka",
+							"size": 32,
+							"layout": { "align": "center" }
+						},
+						{
+							"name": "ov_bottom_right",
+							"kind": "image",
+							"atlas": "ui_atlas",
+							"sprite": "chamomile",
+							"layout": {
+								"width": 128,
+								"height": 128,
+								"align": ["end", "end"],
+								"margin": [0, 10, 0, 10]
+							}
+						},
+						{
+							"name": "ov_bottom_bar",
+							"kind": "image",
+							"atlas": "ui_atlas",
+							"sprite": "panel",
+							"slice": [12, 12, 12, 12],
+							"color": [255, 200, 255, 255],
+							"layout": {
+								"width": "fill",
+								"height": 16,
+								"align": ["center", "end"],
+								"max": [200, 0]
+							}
+						}
+					]
+				}
+			]
 		}
 	]
 }

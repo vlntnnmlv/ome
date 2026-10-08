@@ -102,12 +102,14 @@ main :: proc() {
 
 	// --- UI ---
 	screen_rect := core.Rect{0, 0, width, height}
-	stage := ui.stage_create()
+	stage := ui.stage_create(library)
 	defer ui.stage_destroy(stage)
 
 	app.engine_add_event_handler(engine, stage, ui.stage_handle_event)
 
 	scene_handle := ui.stage_add_scene(stage, "main", screen_rect)
+	scene := ui.stage_get_scene(stage, scene_handle)
+	// scene.debug = true
 	ui.stage_show_scene(stage, scene_handle)
 	// ---------
 
@@ -117,9 +119,6 @@ main :: proc() {
 		return
 	}
 	defer script.vm_destroy(vm)
-
-	scene := ui.stage_get_scene(stage, scene_handle)
-	scene.debug = true
 	// ---------
 
 	// --- API ---
@@ -168,12 +167,13 @@ main :: proc() {
 		bind.binder_draw(binder)
 
 		ui.stage_render(stage, engine.renderer)
+		render.renderer_set_camera(engine.renderer, 1)
 		render.text(
 			engine.renderer,
 			fmt.tprint(engine.clock.fps),
 			font_handle,
 			64,
-			{0, screen_rect.h, 500, 500},
+			{0, screen_rect.h / 2, 500, 500},
 			core.Color{0, 0, 255, 255},
 		)
 	}
