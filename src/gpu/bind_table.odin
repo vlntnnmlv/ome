@@ -32,8 +32,8 @@ bind_table_create :: proc(device: ^MTL.Device, fragment_fn: ^MTL.Function) -> ^B
 	bind_table.pending = make([dynamic]PendingRelease)
 
 	sampler_descriptor := NS.new(MTL.SamplerDescriptor)
-	sampler_descriptor->setMinFilter(.Linear)
-	sampler_descriptor->setMagFilter(.Linear)
+	sampler_descriptor->setMinFilter(.Nearest)
+	sampler_descriptor->setMagFilter(.Nearest)
 	sampler_descriptor->setSupportArgumentBuffers(true)
 
 	bind_table.device = device

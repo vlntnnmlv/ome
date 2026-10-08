@@ -18,6 +18,9 @@ MIN_ATLAS_SIZE :: 512
 @(private)
 MAX_ATLAS_SIZE :: 4096
 
+@(private)
+ATLAS_SPRITE_SPACING :: 2
+
 AtlasHandle :: distinct handle_map.Handle
 
 Atlas :: struct {
@@ -97,8 +100,8 @@ atlas_load_from_files :: proc(
 		}
 		rect: STBRP.Rect = {
 			id = i32(i),
-			w  = STBRP.Coord(width),
-			h  = STBRP.Coord(height),
+			w  = STBRP.Coord(width) + 2 * ATLAS_SPRITE_SPACING,
+			h  = STBRP.Coord(height) + 2 * ATLAS_SPRITE_SPACING,
 		}
 		append(&rects, rect)
 
@@ -150,7 +153,12 @@ atlas_load_from_files :: proc(
 
 	size := f32(atlas_size)
 	for &image, i in images {
-		image.rect = core.Rect{f32(rects[i].x), f32(rects[i].y), f32(rects[i].w), f32(rects[i].h)}
+		image.rect = core.Rect {
+			f32(rects[i].x + ATLAS_SPRITE_SPACING),
+			f32(rects[i].y + ATLAS_SPRITE_SPACING),
+			f32(rects[i].w - 2 * ATLAS_SPRITE_SPACING),
+			f32(rects[i].h - 2 * ATLAS_SPRITE_SPACING),
+		}
 
 		sprites[image.name] = SpriteData {
 			atlas_rect = image.rect,
