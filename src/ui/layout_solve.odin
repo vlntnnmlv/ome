@@ -47,8 +47,8 @@ pass_fit :: proc(tree: ^LayoutTree, axis: core.Axis) {
 			min_size = f32(fixed)
 		}
 
-		node.size[axis] = clamp_size(size, layout.min[axis], layout.max[axis])
-		node.min_size[axis] = clamp_size(min_size, layout.min[axis], layout.max[axis])
+		node.size[axis] = clamp(size, layout.min[axis], max_limit(layout, axis))
+		node.min_size[axis] = clamp(min_size, layout.min[axis], max_limit(layout, axis))
 	}
 }
 
@@ -113,12 +113,6 @@ grow_stack :: proc(children: []LayoutNode, axis: core.Axis, available, spacing: 
 			break
 		}
 	}
-}
-
-@(private)
-is_at_max :: proc(child: LayoutNode, axis: core.Axis) -> bool {
-	max_size := child.layout.max[axis]
-	return max_size > 0 && child.size[axis] >= max_size
 }
 
 @(private)
@@ -227,9 +221,9 @@ position_overlap :: proc(children: []LayoutNode, axis: core.Axis, slot: core.Spa
 @(private)
 flow_stacks :: proc(flow: Flow, axis: core.Axis) -> bool {
 	switch flow {
-	case .Row:
+	case .Horizontal:
 		return axis == .X
-	case .Column:
+	case .Vertical:
 		return axis == .Y
 	case .Overlay:
 		return false
@@ -239,9 +233,18 @@ flow_stacks :: proc(flow: Flow, axis: core.Axis) -> bool {
 }
 
 @(private)
+max_limit :: proc(layout: Layout, axis: core.Axis) -> f32 {
+	return layout.max[axis] if layout.max[axis] > 0 else max(f32)
+}
+
+@(private)
+is_at_max :: proc(child: LayoutNode, axis: core.Axis) -> bool {
+	return child.size[axis] >= max_limit(child.layout, axis)
+}
+
+@(private)
 clamp_size :: proc(value, min_value, max_value: f32) -> f32 {
-	v := min(value, max_value) if max_value > 0 else value
-	return max(v, min_value)
+	return max(min(value, max_value), min_value)
 }
 
 @(private)

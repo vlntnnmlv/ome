@@ -35,9 +35,8 @@
 					"name": "icon",
 					"kind": "image",
 					"atlas": "ui_atlas",
-					"sprite": "frame",
-					"slice": [12, 12, 12, 12],
-					"layout": { "width": 48, "height": 48 }
+					"sprite": "bluebell",
+					"layout": { "width": 128, "height": 128 }
 				}
 			]
 		},
@@ -251,11 +250,10 @@
 							"name": "ov_bottom_right",
 							"kind": "image",
 							"atlas": "ui_atlas",
-							"sprite": "panel",
-							"slice": [12, 12, 12, 12],
+							"sprite": "chamomile",
 							"layout": {
-								"width": 48,
-								"height": 48,
+								"width": 128,
+								"height": 128,
 								"align": ["end", "end"],
 								"margin": [0, 10, 0, 10]
 							}

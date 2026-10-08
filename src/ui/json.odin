@@ -126,9 +126,9 @@ layout_from_object :: proc(obj: json.Object, name: string) -> Layout {
 	if has_flow {
 		switch flow_string {
 		case "row":
-			flow = .Row
+			flow = .Horizontal
 		case "column":
-			flow = .Column
+			flow = .Vertical
 		case "overlay":
 			flow = .Overlay
 		}

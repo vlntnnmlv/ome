@@ -109,7 +109,7 @@ main :: proc() {
 
 	scene_handle := ui.stage_add_scene(stage, "main", screen_rect)
 	scene := ui.stage_get_scene(stage, scene_handle)
-	scene.debug = true
+	// scene.debug = true
 	ui.stage_show_scene(stage, scene_handle)
 	// ---------
 

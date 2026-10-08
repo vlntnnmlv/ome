@@ -9,10 +9,10 @@ Sizing :: union #no_nil {
 	Percent,
 }
 
-Fixed :: distinct f32
+Fixed :: distinct f32 // size in pixels
 Fit :: struct {}
-Fill :: distinct f32
-Percent :: distinct f32
+Fill :: distinct f32 // ratio of fill distribution
+Percent :: distinct f32 // size in percentage of the parent container
 
 Align :: enum {
 	Start,
@@ -21,8 +21,8 @@ Align :: enum {
 }
 
 Flow :: enum {
-	Row,
-	Column,
+	Horizontal,
+	Vertical,
 	Overlay,
 }
 
