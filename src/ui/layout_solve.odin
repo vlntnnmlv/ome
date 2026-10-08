@@ -47,8 +47,8 @@ pass_fit :: proc(tree: ^LayoutTree, axis: core.Axis) {
 			min_size = f32(fixed)
 		}
 
-		node.size[axis] = clamp(size, layout.min[axis], max_limit(layout, axis))
-		node.min_size[axis] = clamp(min_size, layout.min[axis], max_limit(layout, axis))
+		node.size[axis] = clamp_size(size, layout.min[axis], max_limit(layout, axis))
+		node.min_size[axis] = clamp_size(min_size, layout.min[axis], max_limit(layout, axis))
 	}
 }
 
@@ -102,7 +102,7 @@ grow_stack :: proc(children: []LayoutNode, axis: core.Axis, available, spacing: 
 			}
 
 			wanted := child.size[axis] + free_space * f32(child_weight) / weight
-			clamped := clamp_size(wanted, child.min_size[axis], child.layout.max[axis])
+			clamped := clamp_size(wanted, child.min_size[axis], max_limit(child.layout, axis))
 			froze_any ||= clamped != wanted
 			remaining -= clamped - child.size[axis]
 			child.size[axis] = clamped
@@ -156,7 +156,7 @@ grow_overlap :: proc(children: []LayoutNode, axis: core.Axis, available: f32) {
 		}
 
 		size = max(size, child.min_size[axis])
-		child.size[axis] = clamp_size(size, child.layout.min[axis], child.layout.max[axis])
+		child.size[axis] = clamp_size(size, child.layout.min[axis], max_limit(child.layout, axis))
 	}
 }
 
