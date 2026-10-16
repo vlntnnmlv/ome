@@ -158,6 +158,8 @@ main :: proc() {
 	)
 	// ---------
 
+	desc := ui.panel_to_description(scene, scene.root_handle, context.temp_allocator)
+	ui.json_save(desc, "test")
 
 	// --- LOOP ---
 	for app.engine_next_frame(engine) {

@@ -227,6 +227,8 @@ flow_stacks :: proc(flow: Flow, axis: core.Axis) -> bool {
 		return axis == .Y
 	case .Overlay:
 		return false
+	case .Invalid:
+		return false
 	}
 
 	return false
@@ -261,6 +263,8 @@ align_offset :: proc(align: Align, space: f32) -> f32 {
 		return space * 0.5
 	case .End:
 		return space
+	case .Invalid:
+		return 0
 	}
 	return 0
 }

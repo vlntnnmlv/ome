@@ -41,12 +41,6 @@ panel_description_from_object :: proc(
 ) {
 	name, _ := json_string(obj, "name", "unnamed")
 
-	// r: [4]f32
-	// if !json_numbers(obj, "rect", r[:]) {
-	// 	log.warnf("ui/json: panel '%s' has no valid rect", name)
-	// 	return {}, false
-	// }
-
 	layout: Layout = {}
 	if layout_object, has_layout := obj["layout"].(json.Object); has_layout {
 		layout = layout_from_object(layout_object, name)
@@ -114,45 +108,24 @@ layout_from_object :: proc(obj: json.Object, name: string) -> Layout {
 	height := json_sizing_from_object(obj, "height", name)
 
 	min_s: [2]f32
-	_ = json_numbers(obj, "min", min_s[:])
+	json_numbers(obj, "min", f32, min_s[:])
 
 	max_s: [2]f32
-	_ = json_numbers(obj, "max", max_s[:])
+	json_numbers(obj, "max", f32, max_s[:])
 
 	align := json_align(obj, "align", name)
 
-	flow_string, has_flow := json_string(obj, "flow")
-	flow: Flow
-	if has_flow {
-		switch flow_string {
-		case "row":
-			flow = .Horizontal
-		case "column":
-			flow = .Vertical
-		case "overlay":
-			flow = .Overlay
-		}
-	}
-
-	content_align_string, has_content_align := json_string(obj, "content_align")
-	content_align := Align.Start
-
-	if has_content_align {
-		switch content_align_string {
-		case "center":
-			content_align = .Center
-		case "end":
-			content_align = .End
-		}
-	}
+	ok: bool
+	layout.flow, ok = json_enum(obj, "flow", Flow.Invalid)
+	layout.content_align, ok = json_enum(obj, "content_align", Align.Invalid)
 
 	padding: [4]f32
-	_ = json_numbers(obj, "padding", padding[:])
+	_ = json_numbers(obj, "padding", f32, padding[:])
 
 	margin: [4]f32
-	_ = json_numbers(obj, "margin", margin[:])
+	_ = json_numbers(obj, "margin", f32, margin[:])
 
-	spacing: f32 = json_number(obj, "spacing")
+	layout.spacing, ok = json_number(obj, "spacing", f32, 0.0)
 
 	layout.size = {
 		.X = width,
@@ -167,11 +140,8 @@ layout_from_object :: proc(obj: json.Object, name: string) -> Layout {
 		.Y = max_s.y,
 	}
 	layout.align = align
-	layout.flow = flow
 	layout.padding = core.RectOffset{padding[0], padding[1], padding[2], padding[3]}
 	layout.margin = core.RectOffset{margin[0], margin[1], margin[2], margin[3]}
-	layout.spacing = spacing
-	layout.content_align = content_align
 
 	return layout
 }
@@ -207,14 +177,13 @@ json_sizing_from_object :: proc(obj: json.Object, key, name: string) -> Sizing {
 
 @(private)
 spec_from_object :: proc(library: ^assets.Library, obj: json.Object) -> (Spec, bool) {
-	kind, _ := json_string(obj, "kind", "panel")
-
 	color := core.Color{255, 255, 255, 255}
 	c: [4]f32
-	if json_numbers(obj, "color", c[:]) {
+	if json_numbers(obj, "color", f32, c[:]) {
 		color = core.color_clamp(c)
 	}
 
+	kind, _ := json_string(obj, "kind", "panel")
 	switch kind {
 	case "panel":
 		return PanelSpec{color = color}, true
@@ -235,7 +204,7 @@ spec_from_object :: proc(library: ^assets.Library, obj: json.Object) -> (Spec, b
 
 		offset: core.RectOffset
 		slice: [4]f32
-		if json_numbers(obj, "slice", slice[:]) {
+		if json_numbers(obj, "slice", f32, slice[:]) {
 			offset = core.RectOffset{slice[0], slice[1], slice[2], slice[3]}
 		}
 
@@ -253,7 +222,7 @@ spec_from_object :: proc(library: ^assets.Library, obj: json.Object) -> (Spec, b
 		}
 
 		return ImageSpec {
-				panel = PanelSpec{color = color},
+				color = color,
 				atlas_handle = atlas_handle,
 				sprite_name = sprite_name,
 				slice_offset = offset,
@@ -275,14 +244,9 @@ spec_from_object :: proc(library: ^assets.Library, obj: json.Object) -> (Spec, b
 			return nil, false
 		}
 
-		size := json_number(obj, "size", 32)
+		size, _ := json_number(obj, "size", u32, 32)
 
-		return TextSpec {
-				panel = PanelSpec{color = color},
-				text = text,
-				font_handle = font_handle,
-				font_size = u32(size),
-			},
+		return TextSpec{color = color, text = text, font_handle = font_handle, font_size = size},
 			true
 	case "button":
 		action, has_action := json_string(obj, "on_click")
@@ -290,21 +254,21 @@ spec_from_object :: proc(library: ^assets.Library, obj: json.Object) -> (Spec, b
 			log.warn("ui/json: button panel needs 'on_click'")
 			return nil, false
 		}
-		return ButtonSpec{panel = PanelSpec{color = color}, action = action}, true
+		return ButtonSpec{color = color, action = action}, true
 	}
 
 	log.warnf("ui/json: unknown kind '%s'", kind)
 	return nil, false
 }
 
-@(private = "file")
-json_string :: proc(obj: json.Object, key: string, fallback := "") -> (string, bool) {
-	str, ok := obj[key].(json.String)
-	if ok {
-		return string(str), true
-	}
-	return fallback, false
-}
+// @(private = "file")
+// json_string :: proc(obj: json.Object, key: string, fallback := "") -> (string, bool) {
+// 	str, ok := obj[key].(json.String)
+// 	if ok {
+// 		return string(str), true
+// 	}
+// 	return fallback, false
+// }
 
 json_align :: proc(obj: json.Object, key, name: string) -> (align: [core.Axis]Align) {
 	#partial switch value in obj[key] {
@@ -341,27 +305,48 @@ json_align_value :: proc(s, key, name: string) -> Align {
 	return .Start
 }
 
-@(private = "file")
-json_number :: proc(obj: json.Object, key: string, fallback: f32 = 0) -> f32 {
-	n, ok := obj[key].(json.Float)
-	if ok {
-		return f32(n)
-	}
-	return fallback
-}
+// @(private = "file")
+// json_number :: proc(obj: json.Object, key: string, fallback: f32 = 0) -> f32 {
+// 	n, ok := obj[key].(json.Float)
+// 	if ok {
+// 		return f32(n)
+// 	}
+// 	return fallback
+// }
 
-@(private = "file")
-json_numbers :: proc(obj: json.Object, key: string, out: []f32) -> bool {
-	arr, ok := obj[key].(json.Array)
-	if !ok || len(arr) < len(out) {
-		return false
-	}
-	for &o, i in out {
-		n, is_number := arr[i].(json.Float)
-		if !is_number {
-			return false
-		}
-		o = f32(n)
-	}
-	return true
-}
+// @(private = "file")
+// json_numbers :: proc(obj: json.Object, key: string, out: []f32) -> bool {
+// 	arr, ok := obj[key].(json.Array)
+// 	if !ok || len(arr) < len(out) {
+// 		return false
+// 	}
+// 	for &o, i in out {
+// 		n, is_number := arr[i].(json.Float)
+// 		if !is_number {
+// 			return false
+// 		}
+// 		o = f32(n)
+// 	}
+// 	return true
+// }
+
+////
+
+// json_enum :: proc(obj: json.Object, key: string, $T: typeid, fallback: T) -> T {
+// 	if !reflect.is_enum(type_info_of(T)) {
+// 		return fallback
+// 	}
+
+// 	e_str, ok := obj[key].(json.String)
+// 	if !ok {
+// 		return fallback
+// 	}
+
+// 	e: T
+// 	e, ok = reflect.enum_from_name(T, strings.to_ada_case(e_str, context.temp_allocator))
+// 	if !ok {
+// 		return fallback
+// 	}
+// 	return e
+
+// }

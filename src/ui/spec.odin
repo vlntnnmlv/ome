@@ -18,12 +18,12 @@ PanelSpec :: struct {
 }
 
 ButtonSpec :: struct {
-	using panel: PanelSpec,
-	action:      string,
+	using _: PanelSpec,
+	action:  string,
 }
 
 ImageSpec :: struct {
-	using panel:  PanelSpec,
+	using _:      PanelSpec,
 	atlas_handle: assets.AtlasHandle,
 	sprite_name:  string,
 	slice_offset: core.RectOffset,
@@ -31,7 +31,7 @@ ImageSpec :: struct {
 }
 
 TextSpec :: struct {
-	using panel: PanelSpec,
+	using _:     PanelSpec,
 	text:        string,
 	font_handle: assets.FontHandle,
 	font_size:   u32,

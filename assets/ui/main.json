@@ -3,7 +3,7 @@
 	"layout": {
 		"width": "fill",
 		"height": "fill",
-		"flow": "column",
+		"flow": "vertical",
 		"padding": [16, 16, 16, 16],
 		"spacing": 16
 	},
@@ -13,7 +13,7 @@
 			"layout": {
 				"width": "fill",
 				"height": "fit",
-				"flow": "row",
+				"flow": "horizontal",
 				"padding": [12, 12, 12, 12],
 				"spacing": 8,
 				"align": "center"
@@ -42,7 +42,12 @@
 		},
 		{
 			"name": "weights",
-			"layout": { "width": "fill", "height": 60, "flow": "row", "spacing": 8 },
+			"layout": {
+				"width": "fill",
+				"height": 60,
+				"flow": "horizontal",
+				"spacing": 8
+			},
 			"children": [
 				{
 					"name": "fill_1a",
@@ -73,7 +78,12 @@
 		},
 		{
 			"name": "max_clamp",
-			"layout": { "width": "fill", "height": 40, "flow": "row", "spacing": 8 },
+			"layout": {
+				"width": "fill",
+				"height": 40,
+				"flow": "horizontal",
+				"spacing": 8
+			},
 			"children": [
 				{
 					"name": "clamped",
@@ -99,7 +109,7 @@
 			"layout": {
 				"width": "fill",
 				"height": 80,
-				"flow": "row",
+				"flow": "horizontal",
 				"spacing": 8,
 				"content_align": "end"
 			},
@@ -135,12 +145,12 @@
 			"layout": {
 				"width": "fill",
 				"height": "fill",
-				"flow": "row",
+				"flow": "horizontal",
 				"spacing": 16
 			},
 			"children": [
 				{
-					"name": "column",
+					"name": "vertical",
 					"kind": "image",
 					"atlas": "ui_atlas",
 					"sprite": "frame",
@@ -148,7 +158,7 @@
 					"layout": {
 						"width": 200,
 						"height": "fill",
-						"flow": "column",
+						"flow": "vertical",
 						"padding": [12, 12, 12, 12],
 						"spacing": 8,
 						"content_align": "center"

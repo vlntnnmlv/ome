@@ -15,12 +15,14 @@ Fill :: distinct f32 // ratio of fill distribution
 Percent :: distinct f32 // size in percentage of the parent container
 
 Align :: enum {
+	Invalid,
 	Start,
 	Center,
 	End,
 }
 
 Flow :: enum {
+	Invalid,
 	Horizontal,
 	Vertical,
 	Overlay,
