@@ -1,9 +1,8 @@
-// 2D sprite/font/solid shader — authored in Slang, cross-compiled to MSL.
-// slangc sprite.slang -target metal -o sprite.metal
+// 2D sprite/font/solid shader. Compiled to SPIR-V by gpu/shader.odin.
 
-static const int MAX_SPRITES = 256;
+static const int MAX_TEXTURES = 256; // MUST match gpu.MAX_TEXTURES
 
-// MUST match Odin `Vertex2D` (src/core/graphics.odin) byte-for-byte:
+// MUST match Odin `Vertex2D` (src/gpu/pipeline.odin) byte-for-byte:
 //
 //   offset  0  position : [4]f32
 //   offset 16  uv       : [2]f32
@@ -12,15 +11,12 @@ static const int MAX_SPRITES = 256;
 //   offset 44  tex_id   : u32
 //   size 48, align 4
 //
-// Fields are declared as loose scalars ON PURPOSE. Slang has no
-// `packed_float4`, so a `float4 position` member would force 16-byte alignment
-// in the emitted MSL and push `color` to offset 32 / the stride to 64 —
-// silently misreading every vertex after the first. All-scalar members keep
-// align 4 and stride 48.
+// All-scalar members on purpose: a float4 member would get 16-byte alignment
+// under std430 and push `color` to offset 32 / stride to 64.
 struct VertexIn {
-  float px, py, pz, pw; // position
-  float u, v;           // uv
-  float cr, cg, cb, ca; // color
+  float px, py, pz, pw;
+  float u, v;
+  float cr, cg, cb, ca;
   uint mode;
   uint tex_id;
 };
@@ -29,35 +25,30 @@ struct VertexOut {
   float4 position : SV_Position;
   float2 uv : TEXCOORD0;
   float4 color : COLOR0;
-  nointerpolation uint mode : MODE; // ints must not interpolate -> [[flat]]
+  nointerpolation uint mode : MODE;
   nointerpolation uint tex_id : TEXID;
 };
 
-// Column-major float4x4 matching Odin `matrix[4,4]f32` byte-for-byte.
-// Slang emits `mul(M, v)` as MSL `v * M` over row-packed storage; the two
-// flips cancel, so the Odin matrix uploads raw. `mul(v, M)` would transpose
-// silently — argument order matters.
+// Column-major, matches Odin `matrix[4,4]f32` (compiled with
+// -matrix-layout-column-major).
 struct CameraUniform {
   float4x4 view_proj;
 };
-ConstantBuffer<CameraUniform> camera : register(b2);
+[[vk::push_constant]]
+ConstantBuffer<CameraUniform> camera;
 
-// argument buffer: 256 textures at ids 0..255, sampler at id 256.
-// Declared first so it takes Metal buffer(0) in BOTH stages, which is where the
-// Odin side binds `texture_manager.arguments`.
-struct SpriteTable {
-  Texture2D<float4> textures[MAX_SPRITES];
-  SamplerState s;
-};
-ParameterBlock<SpriteTable> sprites : register(b0);
+// set 0: bindless, bound once per frame
+[[vk::binding(0, 0)]]
+Texture2D<float4> textures[MAX_TEXTURES];
+[[vk::binding(1, 0)]]
+SamplerState sprite_sampler;
 
-// Vertex stream, pulled by vertex_id. Lands on Metal buffer(1) in BOTH stages —
-// Slang hands every global to every entry point, so the fragment stage declares
-// it too even though it never reads it.
-StructuredBuffer<VertexIn> vertices : register(t1);
+// set 1: push descriptor, the frame slot's vertex ring buffer
+[[vk::binding(0, 1)]]
+StructuredBuffer<VertexIn> vertices;
 
 [shader("vertex")]
-VertexOut vertex_main(uint vid: SV_VertexID) {
+VertexOut vertex_main(uint vid: SV_VulkanVertexID) {
   VertexIn vin = vertices[vid];
   VertexOut o;
   o.position = mul(camera.view_proj, float4(vin.px, vin.py, vin.pz, vin.pw));
@@ -71,11 +62,14 @@ VertexOut vertex_main(uint vid: SV_VertexID) {
 [shader("fragment")]
 float4 fragment_main(VertexOut vert) : SV_Target {
   if (vert.mode == 1u) {
-    return sprites.textures[vert.tex_id].Sample(sprites.s, vert.uv).x *
+    return textures[NonUniformResourceIndex(vert.tex_id)]
+               .Sample(sprite_sampler, vert.uv)
+               .x *
            vert.color;
   }
   if (vert.mode == 2u) {
-    return sprites.textures[vert.tex_id].Sample(sprites.s, vert.uv) *
+    return textures[NonUniformResourceIndex(vert.tex_id)].Sample(sprite_sampler,
+                                                                 vert.uv) *
            vert.color;
   }
   return vert.color;

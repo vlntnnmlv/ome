@@ -41,6 +41,7 @@ build() {
 	odin build src/editor \
 		-vet -strict-style -vet-tabs -vet-cast -warnings-as-errors -disallow-do \
 		-collection:ome=src \
+		-define:OME_VULKAN_VALIDATION=true \
 		-extra-linker-flags:"-L$(pwd)/build/lib" \
 		-out:./build/editor
 

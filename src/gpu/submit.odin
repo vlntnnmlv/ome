@@ -1,35 +1,6 @@
 package omegpu
 
-import "core:slice"
-
-import NS "core:sys/darwin/Foundation"
-import MTL "vendor:darwin/Metal"
-
-PrimitiveType :: enum {
-	Point = 0,
-	Line,
-	Line_Strip,
-	Triangle,
-	Triangle_Strip,
-}
-
-@(private)
-primitive_type_to_metal :: proc(primitive_type: PrimitiveType) -> MTL.PrimitiveType {
-	switch primitive_type {
-	case .Point:
-		return .Point
-	case .Line:
-		return .Line
-	case .Line_Strip:
-		return .LineStrip
-	case .Triangle:
-		return .Triangle
-	case .Triangle_Strip:
-		return .TriangleStrip
-	}
-
-	return .Point
-}
+import vk "vendor:vulkan"
 
 CullMode :: enum {
 	None = 0,
@@ -37,18 +8,11 @@ CullMode :: enum {
 	Back,
 }
 
-@(private)
-cull_mode_to_metal :: proc(cull_mode: CullMode) -> MTL.CullMode {
-	switch cull_mode {
-	case .None:
-		return .None
-	case .Front:
-		return .Front
-	case .Back:
-		return .Back
-	}
-
-	return .None
+PrimitiveType :: enum {
+	Line = 0,
+	Line_Strip,
+	Triangle,
+	Triangle_Strip,
 }
 
 RenderState :: struct {
@@ -63,6 +27,51 @@ RenderCall :: struct {
 	count:       int,
 }
 
+@(private)
+pixel_format_to_channels :: proc(pixel_format: PixelFormat) -> i32 {
+	switch pixel_format {
+	case .R8_Unorm:
+		return 1
+	case .RGBA8_Unorm_sRGB:
+		return 4
+	}
+
+	return 0
+}
+
+@(private)
+primitive_type_to_vulkan :: proc(
+	primitive_type: PrimitiveType,
+) -> (
+	vk.PrimitiveTopology,
+	TopologyClass,
+) {
+	switch primitive_type {
+	case .Line:
+		return .LINE_LIST, .Line
+	case .Line_Strip:
+		return .LINE_STRIP, .Line
+	case .Triangle:
+		return .TRIANGLE_LIST, .Triangle
+	case .Triangle_Strip:
+		return .TRIANGLE_STRIP, .Triangle
+	}
+	return .TRIANGLE_LIST, .Triangle
+}
+
+@(private)
+cull_mode_to_vulkan :: proc(cull_mode: CullMode) -> vk.CullModeFlags {
+	switch cull_mode {
+	case .None:
+		return {}
+	case .Front:
+		return {.FRONT}
+	case .Back:
+		return {.BACK}
+	}
+	return {}
+}
+
 frame_submit :: proc(
 	device: ^Device,
 	vertices: []Vertex2D,
@@ -74,40 +83,58 @@ frame_submit :: proc(
 	}
 
 	slot := device.frame_slot_index
-	buffer_upload(&device.vertex_ring, slot, vertices)
-
-	encoder := device.frame_context.encoder
-	encoder->setRenderPipelineState(device.pipeline_state)
-	encoder->setFrontFacingWinding(.CounterClockwise)
-	encoder->setVertexBuffer(device.vertex_ring.gpu_ring[device.frame_slot_index], 0, 1)
-
-	encoder->setFragmentBuffer(device.bind_table.arguments, 0, 0)
-	if len(device.bind_table.resources) > 0 {
-		encoder->useResourcesStages(device.bind_table.resources[:], {.Read}, {.Fragment})
+	if !buffer_upload(&device.vertex_ring, slot, vertices) {
+		return
 	}
+	cmd := device.frames[slot].command_buffer
 
-	last: RenderState = {
-		view = max(u32),
-		cull = .None,
+	vertex_info := vk.DescriptorBufferInfo {
+		buffer = device.vertex_ring.ring[slot].handle,
+		offset = 0,
+		range  = vk.DeviceSize(vk.WHOLE_SIZE),
 	}
-	for call in calls {
-		if call.view != last.view {
-			encoder->setVertexBytes(
-				slice.bytes_from_ptr(&view_projections[call.view], size_of(matrix[4, 4]f32)),
-				2,
+	write := vk.WriteDescriptorSet {
+		sType           = .WRITE_DESCRIPTOR_SET,
+		dstBinding      = 0,
+		descriptorCount = 1,
+		descriptorType  = .STORAGE_BUFFER,
+		pBufferInfo     = &vertex_info,
+	}
+	vk.CmdPushDescriptorSetKHR(cmd, .GRAPHICS, device.pipeline_layout, 1, 1, &write)
+
+	last_class: TopologyClass
+	last_topology: vk.PrimitiveTopology
+	last_cull: CullMode
+	last_view: u32
+
+	for call, i in calls {
+		first := i == 0
+		topology, class := primitive_type_to_vulkan(call.primitive)
+
+		if first || class != last_class {
+			vk.CmdBindPipeline(cmd, .GRAPHICS, device.pipelines[class])
+			last_class = class
+		}
+		if first || topology != last_topology {
+			vk.CmdSetPrimitiveTopology(cmd, topology)
+			last_topology = topology
+		}
+		if first || call.cull != last_cull {
+			vk.CmdSetCullMode(cmd, cull_mode_to_vulkan(call.cull))
+			last_cull = call.cull
+		}
+		if first || call.view != last_view {
+			vk.CmdPushConstants(
+				cmd,
+				device.pipeline_layout,
+				{.VERTEX},
+				0,
+				size_of(matrix[4, 4]f32),
+				&view_projections[call.view],
 			)
+			last_view = call.view
 		}
 
-		if call.cull != last.cull {
-			encoder->setCullMode(cull_mode_to_metal(call.cull))
-		}
-
-		last = call.state
-		encoder->drawPrimitivesWithInstanceCount(
-			primitive_type_to_metal(call.primitive),
-			NS.UInteger(call.start),
-			NS.UInteger(call.count),
-			1,
-		)
+		vk.CmdDraw(cmd, u32(call.count), 1, u32(call.start), 0)
 	}
 }

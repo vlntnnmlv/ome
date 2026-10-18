@@ -37,11 +37,7 @@ engine_create :: proc(
 		return nil, false
 	}
 
-	device, device_ok := gpu.device_create(
-		platform.window_native_handle(window),
-		window.info,
-		core.color_to_linear64(clear_color),
-	)
+	device, device_ok := gpu.device_create(window, core.color_to_linear64(clear_color))
 	if !device_ok {
 		platform.window_destroy(window)
 		return nil, false

@@ -68,7 +68,7 @@ batch_reserve :: proc(batch: ^Batch, primitive: gpu.PrimitiveType, n: int) -> []
 
 @(private)
 batch_append_render_call :: proc(batch: ^Batch, primitive: gpu.PrimitiveType, start, count: int) {
-	mergeable := primitive == .Point || primitive == .Line || primitive == .Triangle
+	mergeable := primitive == .Line || primitive == .Triangle
 	n := len(batch.calls)
 	if n > 0 &&
 	   mergeable &&

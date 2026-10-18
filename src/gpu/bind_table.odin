@@ -1,55 +1,124 @@
 package omegpu
 
-import NS "core:sys/darwin/Foundation"
-import MTL "vendor:darwin/Metal"
+import vk "vendor:vulkan"
 
 import "ome:handle_map"
 
+@(private)
 PendingRelease :: struct {
 	handle:       TextureHandle,
 	frame_number: u64,
 }
 
 BindTable :: struct {
-	device:       ^MTL.Device,
+	device:       ^Device,
 	textures:     handle_map.Map(Texture, TextureHandle),
-	resources:    [dynamic]^MTL.Resource,
-	sampler:      ^MTL.SamplerState,
-	encoder:      ^MTL.ArgumentEncoder,
-	arguments:    ^MTL.Buffer,
+	sampler:      vk.Sampler,
+	layout:       vk.DescriptorSetLayout,
+	pool:         vk.DescriptorPool,
+	set:          vk.DescriptorSet,
 	pending:      [dynamic]PendingRelease,
 	frame_number: u64,
 }
 
 @(private)
-bind_table_create :: proc(device: ^MTL.Device, fragment_fn: ^MTL.Function) -> ^BindTable {
+bind_table_create :: proc(device: ^Device) -> (^BindTable, bool) {
 	bind_table := new(BindTable)
-	texture_map, err := handle_map.make(Texture, TextureHandle)
-	ensure(err == nil)
-
-	bind_table.textures = texture_map
-	bind_table.resources = make([dynamic]^MTL.Resource)
+	bind_table.device = device
 	bind_table.pending = make([dynamic]PendingRelease)
 
-	sampler_descriptor := NS.new(MTL.SamplerDescriptor)
-	sampler_descriptor->setMinFilter(.Nearest)
-	sampler_descriptor->setMagFilter(.Nearest)
-	sampler_descriptor->setSupportArgumentBuffers(true)
+	texture_map, err := handle_map.make(Texture, TextureHandle)
+	ensure(err == nil)
+	bind_table.textures = texture_map
 
-	bind_table.device = device
+	ok := false
+	defer if !ok {
+		bind_table_destroy(bind_table)
+	}
 
-	bind_table.sampler = device->newSamplerState(sampler_descriptor)
-	bind_table.encoder = fragment_fn->newArgumentEncoder(0)
-	bind_table.arguments = device->newBufferWithLength(
-		bind_table.encoder->encodedLength(),
-		MTL.ResourceStorageModeShared,
-	)
+	sampler_info := vk.SamplerCreateInfo {
+		sType        = .SAMPLER_CREATE_INFO,
+		magFilter    = .NEAREST,
+		minFilter    = .NEAREST,
+		mipmapMode   = .NEAREST,
+		addressModeU = .CLAMP_TO_EDGE,
+		addressModeV = .CLAMP_TO_EDGE,
+		addressModeW = .CLAMP_TO_EDGE,
+	}
+	result := vk.CreateSampler(device.handle, &sampler_info, nil, &bind_table.sampler)
+	if !device_vulkan_ok(result, "vkCreateSampler") {
+		return nil, false
+	}
 
-	bind_table_rebuild(bind_table)
+	bindings := [2]vk.DescriptorSetLayoutBinding {
+		{
+			binding = 0,
+			descriptorType = .SAMPLED_IMAGE,
+			descriptorCount = MAX_TEXTURES,
+			stageFlags = {.FRAGMENT},
+		},
+		{
+			binding = 1,
+			descriptorType = .SAMPLER,
+			descriptorCount = 1,
+			stageFlags = {.FRAGMENT},
+			pImmutableSamplers = &bind_table.sampler,
+		},
+	}
+	binding_flags := [2]vk.DescriptorBindingFlags {
+		{.PARTIALLY_BOUND, .UPDATE_AFTER_BIND, .UPDATE_UNUSED_WHILE_PENDING},
+		{},
+	}
+	flags_info := vk.DescriptorSetLayoutBindingFlagsCreateInfo {
+		sType         = .DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+		bindingCount  = len(binding_flags),
+		pBindingFlags = &binding_flags[0],
+	}
+	layout_info := vk.DescriptorSetLayoutCreateInfo {
+		sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+		pNext        = &flags_info,
+		flags        = {.UPDATE_AFTER_BIND_POOL},
+		bindingCount = len(bindings),
+		pBindings    = &bindings[0],
+	}
+	result = vk.CreateDescriptorSetLayout(device.handle, &layout_info, nil, &bind_table.layout)
+	if !device_vulkan_ok(result, "vkCreateDescriptorSetLayout") {
+		return nil, false
+	}
 
-	return bind_table
+	pool_sizes := [2]vk.DescriptorPoolSize {
+		{type = .SAMPLED_IMAGE, descriptorCount = MAX_TEXTURES},
+		{type = .SAMPLER, descriptorCount = 1},
+	}
+	pool_info := vk.DescriptorPoolCreateInfo {
+		sType         = .DESCRIPTOR_POOL_CREATE_INFO,
+		flags         = {.UPDATE_AFTER_BIND},
+		maxSets       = 1,
+		poolSizeCount = len(pool_sizes),
+		pPoolSizes    = &pool_sizes[0],
+	}
+	result = vk.CreateDescriptorPool(device.handle, &pool_info, nil, &bind_table.pool)
+	if !device_vulkan_ok(result, "vkCreateDescriptorPool") {
+		return nil, false
+	}
+
+	allocate_info := vk.DescriptorSetAllocateInfo {
+		sType              = .DESCRIPTOR_SET_ALLOCATE_INFO,
+		descriptorPool     = bind_table.pool,
+		descriptorSetCount = 1,
+		pSetLayouts        = &bind_table.layout,
+	}
+	result = vk.AllocateDescriptorSets(device.handle, &allocate_info, &bind_table.set)
+	if !device_vulkan_ok(result, "vkAllocateDescriptorSets") {
+		return nil, false
+	}
+
+	ok = true
+	return bind_table, true
 }
 
+// Runs in device_begin after the slot fence wait, so after RING_SIZE frames
+// nothing in flight can still index a released texture.
 @(private)
 bind_table_begin_frame :: proc(bind_table: ^BindTable) {
 	bind_table.frame_number += 1
@@ -65,64 +134,48 @@ bind_table_begin_frame :: proc(bind_table: ^BindTable) {
 }
 
 @(private)
+bind_table_set_slot :: proc(bind_table: ^BindTable, idx: u32, view: vk.ImageView) {
+	image_info := vk.DescriptorImageInfo {
+		imageView   = view,
+		imageLayout = .SHADER_READ_ONLY_OPTIMAL,
+	}
+	write := vk.WriteDescriptorSet {
+		sType           = .WRITE_DESCRIPTOR_SET,
+		dstSet          = bind_table.set,
+		dstBinding      = 0,
+		dstArrayElement = idx,
+		descriptorCount = 1,
+		descriptorType  = .SAMPLED_IMAGE,
+		pImageInfo      = &image_info,
+	}
+	vk.UpdateDescriptorSets(bind_table.device.handle, 1, &write, 0, nil)
+}
+
+@(private)
 bind_table_release :: proc(bind_table: ^BindTable, handle: TextureHandle) {
 	texture := handle_map.get(bind_table.textures, handle)
 	if texture == nil {
 		return
 	}
 
-	bind_table_set_slot(bind_table, handle.idx, nil)
-	for resource, i in bind_table.resources {
-		if resource == cast(^MTL.Resource)texture.native {
-			unordered_remove(&bind_table.resources, i)
-			break
-		}
-	}
-
-	texture.native->release()
+	texture_release_native(bind_table.device, texture)
 	handle_map.remove(&bind_table.textures, handle)
 }
 
 @(private)
-bind_table_set_slot :: proc(bind_table: ^BindTable, idx: u32, texture: ^MTL.Texture) {
-	bind_table.encoder->setArgumentBufferWithOffset(bind_table.arguments, 0)
-	bind_table.encoder->setTexture(texture, NS.UInteger(idx))
-}
-
-@(private)
-bind_table_rebuild :: proc(bind_table: ^BindTable) {
-	bind_table.encoder->setArgumentBufferWithOffset(bind_table.arguments, 0)
-
-	for i in 0 ..< MAX_TEXTURES {
-		bind_table.encoder->setTexture(nil, NS.UInteger(i))
-	}
-
-	clear(&bind_table.resources)
-
-	it := handle_map.make_iter(&bind_table.textures)
-	for texture in handle_map.iter(&it) {
-		assert(texture.handle.idx < MAX_TEXTURES)
-
-		bind_table.encoder->setTexture(texture.native, NS.UInteger(texture.handle.idx))
-		append(&bind_table.resources, cast(^MTL.Resource)texture.native)
-	}
-
-	bind_table.encoder->setSamplerState(bind_table.sampler, MAX_TEXTURES)
-}
-
-@(private)
 bind_table_destroy :: proc(bind_table: ^BindTable) {
+	device := bind_table.device
+
 	it := handle_map.make_iter(&bind_table.textures)
 	for texture in handle_map.iter(&it) {
-		texture.native->release()
+		texture_release_native(device, texture)
 	}
-
 	handle_map.delete(&bind_table.textures)
-	bind_table.sampler->release()
-	bind_table.encoder->release()
-	bind_table.arguments->release()
+
+	vk.DestroyDescriptorPool(device.handle, bind_table.pool, nil) // frees the set
+	vk.DestroyDescriptorSetLayout(device.handle, bind_table.layout, nil)
+	vk.DestroySampler(device.handle, bind_table.sampler, nil)
 
 	delete(bind_table.pending)
-	delete(bind_table.resources)
 	free(bind_table)
 }

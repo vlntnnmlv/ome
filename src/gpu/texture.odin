@@ -1,20 +1,14 @@
 package omegpu
 
 import "core:log"
+import "core:strings"
 
-import NS "core:sys/darwin/Foundation"
-import MTL "vendor:darwin/Metal"
+import vk "vendor:vulkan"
 
 import "ome:core"
 import "ome:handle_map"
 
 MAX_TEXTURES :: 256
-
-@(private)
-Texture :: struct {
-	handle: TextureHandle,
-	native: ^MTL.Texture,
-}
 
 TextureData :: struct {
 	name:   string,
@@ -31,27 +25,26 @@ PixelFormat :: enum {
 }
 
 @(private)
-pixel_format_to_metal :: proc(pixel_format: PixelFormat) -> MTL.PixelFormat {
-	switch pixel_format {
-	case .R8_Unorm:
-		return .R8Unorm
-	case .RGBA8_Unorm_sRGB:
-		return .RGBA8Unorm_sRGB
-	}
-
-	return .Invalid
+Texture :: struct {
+	handle:             TextureHandle,
+	image:              vk.Image,
+	memory:             vk.DeviceMemory,
+	view:               vk.ImageView,
+	width:              u32,
+	height:             u32,
+	format:             PixelFormat,
+	layout_initialized: bool, // false until the first upload has been recorded
 }
 
 @(private)
-pixel_format_to_channels :: proc(pixel_format: PixelFormat) -> i32 {
+pixel_format_to_vulkan :: proc(pixel_format: PixelFormat) -> vk.Format {
 	switch pixel_format {
 	case .R8_Unorm:
-		return 1
+		return .R8_UNORM
 	case .RGBA8_Unorm_sRGB:
-		return 4
+		return .R8G8B8A8_SRGB
 	}
-
-	return 0
+	return .UNDEFINED
 }
 
 texture_create_from_data :: proc(
@@ -70,63 +63,28 @@ texture_create_from_data :: proc(
 		)
 		return {}, .Texture_Limit
 	}
-	desc := MTL.TextureDescriptor.texture2DDescriptorWithPixelFormat(
-		pixel_format_to_metal(format),
-		NS.UInteger(texture_data.width),
-		NS.UInteger(texture_data.height),
-		false,
-	)
-	desc->setStorageMode(.Shared)
-	desc->setUsage({.ShaderRead})
 
-	texture := bind_table.device->newTextureWithDescriptor(desc)
-	region := MTL.Region {
-		origin = {0, 0, 0},
-		size   = {NS.Integer(texture_data.width), NS.Integer(texture_data.height), 1},
+	device := bind_table.device
+	texture := Texture {
+		width  = u32(texture_data.width),
+		height = u32(texture_data.height),
+		format = format,
 	}
-	texture->replaceRegion(
-		region,
-		0,
-		texture_data.pixels,
-		NS.UInteger(texture_data.width * pixel_format_to_channels(format)),
-	)
-	label := NS.String.alloc()->initWithOdinString(string(texture_data.name))
-	texture->setLabel(label)
-	defer label->release()
+	if !texture_create_native(device, &texture, texture_data.name) {
+		return {}, .Load
+	}
 
-	handle, err := handle_map.add(&bind_table.textures, Texture{native = texture})
+	handle, err := handle_map.add(&bind_table.textures, texture)
 	ensure(err == nil)
+	bind_table_set_slot(bind_table, handle.idx, texture.view)
 
-	bind_table_set_slot(bind_table, handle.idx, texture)
-	append(&bind_table.resources, cast(^MTL.Resource)texture)
+	size := int(texture_data.width * texture_data.height * pixel_format_to_channels(format))
+	bytes := make([]u8, size)
+	copy(bytes, texture_data.pixels[:size])
+	upload_queue_push(&device.uploads, handle, {0, 0}, {texture.width, texture.height}, bytes)
 
 	return handle, .None
 }
-
-// texture_write :: proc(
-// 	bind_table: ^BindTable,
-// 	handle: TextureHandle,
-// 	pixels: [^]byte,
-// 	format: PixelFormat,
-// ) {
-// 	texture := handle_map.get(bind_table.textures, handle)
-// 	if texture == nil {
-// 		return
-// 	}
-
-// 	w := texture.native->width()
-// 	h := texture.native->height()
-// 	region := MTL.Region {
-// 		origin = {0, 0, 0},
-// 		size   = {NS.Integer(w), NS.Integer(h), 1},
-// 	}
-// 	texture.native->replaceRegion(
-// 		region,
-// 		0,
-// 		pixels,
-// 		w * NS.UInteger(pixel_format_to_channels(format)),
-// 	)
-// }
 
 texture_write_region :: proc(
 	bind_table: ^BindTable,
@@ -136,37 +94,29 @@ texture_write_region :: proc(
 	source_width: int,
 	format: PixelFormat,
 ) {
-	texture := handle_map.get(bind_table.textures, handle)
-	if texture == nil {
+	if !handle_map.valid(bind_table.textures, handle) {
 		return
 	}
 
-	channels := pixel_format_to_channels(format)
-	x, y := int(rect.x), int(rect.y)
-	bytes_per_row := source_width * int(channels)
+	channels := int(pixel_format_to_channels(format))
+	x, y, w, h := int(rect.x), int(rect.y), int(rect.w), int(rect.h)
+	source_stride := source_width * channels
+	row_size := w * channels
 
-	region := MTL.Region {
-		origin = {NS.Integer(x), NS.Integer(y), 0},
-		size   = {NS.Integer(rect.w), NS.Integer(rect.h), 1},
+	bytes := make([]u8, row_size * h)
+	for row in 0 ..< h {
+		source := (y + row) * source_stride + x * channels
+		copy(bytes[row * row_size:][:row_size], pixels[source:source + row_size])
 	}
-	texture.native->replaceRegion(
-		region,
-		0,
-		&pixels[y * bytes_per_row + x * int(channels)],
-		NS.UInteger(bytes_per_row),
+
+	upload_queue_push(
+		&bind_table.device.uploads,
+		handle,
+		{i32(x), i32(y)},
+		{u32(w), u32(h)},
+		bytes,
 	)
 }
-
-// texture_size :: proc(bind_table: ^BindTable, handle: TextureHandle) -> ([2]f32, bool) {
-// 	tex := handle_map.get(bind_table.textures, handle)
-// 	if tex == nil {
-// 		return {0, 0}, false
-// 	}
-
-// 	tw := f32(tex.native->width())
-// 	th := f32(tex.native->height())
-// 	return {tw, th}, true
-// }
 
 texture_destroy :: proc(bind_table: ^BindTable, handle: TextureHandle) {
 	if !handle_map.valid(bind_table.textures, handle) {
@@ -174,4 +124,89 @@ texture_destroy :: proc(bind_table: ^BindTable, handle: TextureHandle) {
 	}
 
 	append(&bind_table.pending, PendingRelease{handle, bind_table.frame_number})
+}
+
+@(private = "file")
+texture_create_native :: proc(device: ^Device, texture: ^Texture, name: string) -> bool {
+	ok := false
+	defer if !ok {
+		texture_release_native(device, texture)
+	}
+
+	format := pixel_format_to_vulkan(texture.format)
+	image_info := vk.ImageCreateInfo {
+		sType         = .IMAGE_CREATE_INFO,
+		imageType     = .D2,
+		format        = format,
+		extent        = {texture.width, texture.height, 1},
+		mipLevels     = 1,
+		arrayLayers   = 1,
+		samples       = {._1},
+		tiling        = .OPTIMAL,
+		usage         = {.SAMPLED, .TRANSFER_DST},
+		sharingMode   = .EXCLUSIVE,
+		initialLayout = .UNDEFINED,
+	}
+	result := vk.CreateImage(device.handle, &image_info, nil, &texture.image)
+	if !device_vulkan_ok(result, "vkCreateImage") {
+		return false
+	}
+
+	requirements: vk.MemoryRequirements
+	vk.GetImageMemoryRequirements(device.handle, texture.image, &requirements)
+	memory_type, found := device_find_memory_type(
+		device.physical,
+		requirements.memoryTypeBits,
+		{.DEVICE_LOCAL},
+	)
+	if !found {
+		log.errorf("gpu/texture: no device-local memory type for '%s'", name)
+		return false
+	}
+
+	allocate_info := vk.MemoryAllocateInfo {
+		sType           = .MEMORY_ALLOCATE_INFO,
+		allocationSize  = requirements.size,
+		memoryTypeIndex = memory_type,
+	}
+	result = vk.AllocateMemory(device.handle, &allocate_info, nil, &texture.memory)
+	if !device_vulkan_ok(result, "vkAllocateMemory") {
+		return false
+	}
+	vk.BindImageMemory(device.handle, texture.image, texture.memory, 0)
+
+	view_info := vk.ImageViewCreateInfo {
+		sType = .IMAGE_VIEW_CREATE_INFO,
+		image = texture.image,
+		viewType = .D2,
+		format = format,
+		subresourceRange = {aspectMask = {.COLOR}, levelCount = 1, layerCount = 1},
+	}
+	result = vk.CreateImageView(device.handle, &view_info, nil, &texture.view)
+	if !device_vulkan_ok(result, "vkCreateImageView") {
+		return false
+	}
+
+	when VALIDATION {
+		name_info := vk.DebugUtilsObjectNameInfoEXT {
+			sType        = .DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			objectType   = .IMAGE,
+			objectHandle = u64(texture.image),
+			pObjectName  = strings.clone_to_cstring(name, context.temp_allocator),
+		}
+		vk.SetDebugUtilsObjectNameEXT(device.handle, &name_info)
+	}
+
+	ok = true
+	return true
+}
+
+@(private)
+texture_release_native :: proc(device: ^Device, texture: ^Texture) {
+	vk.DestroyImageView(device.handle, texture.view, nil)
+	vk.DestroyImage(device.handle, texture.image, nil)
+	vk.FreeMemory(device.handle, texture.memory, nil)
+	texture.view = 0
+	texture.image = 0
+	texture.memory = 0
 }
